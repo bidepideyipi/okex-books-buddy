@@ -1,11 +1,16 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // RedisConfig holds Redis connection settings.
 type RedisConfig struct {
-	Addr     string
-	Password string
+	Addr            string
+	Password        string
+	TradingPairsKey string // Redis key for trading pairs configuration
+	PollIntervalSec int    // Polling interval for config changes in seconds
 }
 
 // OKEXConfig holds OKEx WebSocket endpoint configuration.
@@ -37,8 +42,10 @@ type AppConfig struct {
 func LoadFromEnv() AppConfig {
 	return AppConfig{
 		Redis: RedisConfig{
-			Addr:     getenvWithDefault("REDIS_ADDR", "localhost:6379"),
-			Password: os.Getenv("REDIS_PASSWORD"),
+			Addr:            getenvWithDefault("REDIS_ADDR", "localhost:6379"),
+			Password:        os.Getenv("REDIS_PASSWORD"),
+			TradingPairsKey: getenvWithDefault("REDIS_TRADING_PAIRS_KEY", "config:trading_pairs"),
+			PollIntervalSec: getenvIntWithDefault("TRADING_PAIRS_POLL_INTERVAL", 20),
 		},
 		OKEX: OKEXConfig{
 			PublicWSURL: getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
@@ -58,6 +65,15 @@ func LoadFromEnv() AppConfig {
 func getenvWithDefault(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func getenvIntWithDefault(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
 	}
 	return def
 }
