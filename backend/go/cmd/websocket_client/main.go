@@ -82,6 +82,28 @@ func main() {
 						log.Printf("Failed to store snapshot for %s: %v", instID, err)
 					}
 				}
+
+				// Compute support/resistance levels using in-memory order book and store in Redis
+				supports, resistances, err := obManager.ComputeSupportResistance(instID, 80, 1.5, 2)
+				if err != nil {
+					log.Printf("Failed to compute support/resistance for %s: %v", instID, err)
+					continue
+				}
+
+				if err := redisClient.StoreSupportResistance(instID, supports, resistances); err != nil {
+					log.Printf("Failed to store support/resistance for %s: %v", instID, err)
+				}
+
+				// Compute large order distribution and sentiment and store in Redis
+				largeBuy, largeSell, sentiment, err := obManager.ComputeLargeOrderDistribution(instID, 0.95, 7.0, 0.3)
+				if err != nil {
+					log.Printf("Failed to compute large order distribution for %s: %v", instID, err)
+					continue
+				}
+
+				if err := redisClient.StoreLargeOrderDistribution(instID, largeBuy, largeSell, sentiment); err != nil {
+					log.Printf("Failed to store large order distribution for %s: %v", instID, err)
+				}
 			}
 		}
 	}()

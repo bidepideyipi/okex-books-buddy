@@ -22,10 +22,11 @@
   - [x] Push normalized events into Redis List (message buffer)
   - [x] Store latest 400-depth snapshot per pair into Redis Hash
 - **M3 – Real-Time Analysis (Go in-memory path)**
-  - [ ] Internal in-memory buffering for low-latency path
-  - [ ] Support / resistance level calculation
-  - [ ] Large order distribution analysis
-  - [ ] Write analysis results into Redis Hash (`analysis:{instrument_id}`)
+  - [x] Internal in-memory buffering for low-latency path
+  - [x] Support / resistance level calculation
+  - [x] Large order distribution analysis
+  - [x] Write analysis results into Redis Hash (`analysis:support_resistance:{instrument_id}`, `analysis:large_orders:{instrument_id}`)
+  - [x] Expose analysis data via HTTP API (`GET /api/analysis/{instrument_id}`)
 - **M4 – Bytewax Stream Processing (Redis List path)**
   - [ ] Define Redis List message format for Bytewax
   - [ ] Implement Bytewax source for Redis List consumption
@@ -42,11 +43,15 @@
   - [ ] Implement real-time metrics WebSocket for frontend
   - [ ] Implement basic auth / API gateway integration (if required)
 - **M7 – Frontend (Vue 3 + Element Plus + ECharts)**
-  - [ ] Create Vue 3 app skeleton (Vite-based)
-  - [ ] Implement WebSocket connection & status indicators
-  - [ ] Implement real-time charts: orderbook metrics, latency, alerts
-  - [ ] Implement pair selection, panel customization, and basic alert views
+  - [x] Create Vue 3 app skeleton (Vite-based)
+  - [x] Implement API service module for fetching analysis data
+  - [x] Implement real-time charts: support/resistance, large orders
+  - [x] Implement pair selection and basic dashboard layout
+  - [x] Configure CORS middleware in API server
+  - [x] Implement WebSocket connection & status indicators
+  - [x] Implement automatic fallback from WebSocket to polling
   - [ ] Implement historical data views (InfluxDB-backed)
+  - [ ] Implement panel customization and alert views
 - **M8 – Ops, HA & Observability**
   - [ ] Containerize all services (Go, Bytewax, API, Vue)
   - [ ] Define docker-compose / K8s manifests for local & prod-like deploy
@@ -75,13 +80,13 @@
 #### 3.2 Real-Time Analysis (Go in-memory path)
 
 - **Support & Resistance**
-  - [ ] Implement simple price level clustering / aggregation
-  - [ ] Define thresholds & configuration (per pair)
+  - [x] Implement simple price level clustering / aggregation
+  - [x] Define thresholds & configuration (per pair)
 - **Large Order Distribution**
-  - [ ] Identify “large” orders by configurable size
-  - [ ] Aggregate by price zones and side (buy/sell)
+  - [x] Identify "large" orders by configurable size
+  - [x] Aggregate by price zones and side (buy/sell)
 - **Output**
-  - [ ] Map computations to Redis Hash fields under `analysis:{instrument_id}`
+  - [x] Map computations to Redis Hash fields under `analysis:support_resistance:{instrument_id}` and `analysis:large_orders:{instrument_id}`
   - [ ] Expose metrics for processing latency
 
 #### 3.3 Bytewax + Redis List Path (Python)
@@ -114,7 +119,7 @@
 #### 3.5 API & Monitoring Backend
 
 - **REST / HTTP APIs**
-  - [ ] `GET /api/analysis/{instrument_id}` (current state from Redis)
+  - [x] `GET /api/analysis/{instrument_id}` (current state from Redis)
   - [ ] `GET /api/history/orderbook` (InfluxDB query)
   - [ ] `GET /api/history/analysis` (InfluxDB query)
 - **WebSocket APIs**
@@ -126,15 +131,15 @@
 #### 3.6 Vue Monitoring Application
 
 - **Foundation**
-  - [ ] Routing, layout, theme, basic auth (if any)
-  - [ ] API and WebSocket client modules
+  - [x] Routing, layout, theme, basic auth (if any)
+  - [x] API and WebSocket client modules
 - **Dashboards**
   - [ ] WebSocket connection & system metrics dashboard
-  - [ ] Per-pair orderbook / analysis dashboard
+  - [x] Per-pair orderbook / analysis dashboard
   - [ ] Alerts list and detail view
   - [ ] Historical charts (via InfluxDB APIs)
 - **UX Functionalities**
-  - [ ] Pair selection & favorite pairs
+  - [x] Pair selection & favorite pairs
   - [ ] Customizable panels & basic persistence (localStorage or backend)
 
 ### 4. Testing & Quality
@@ -151,13 +156,62 @@
 
 ### 5. Current Overall Status
 
-- **Foundations**: DONE (repo structure ✓, config ✓)
-- **WebSocket ingestion & buffering**: DONE (M2 ✓)
-- **Real-time analysis (Go)**: TODO
-- **Bytewax stream processing**: TODO
-- **Storage integration (Redis / InfluxDB)**: TODO
-- **API & backend monitoring service**: TODO
-- **Vue monitoring frontend**: TODO
-- **Deployment & observability**: TODO
+- **Foundations**: ✅ DONE (repo structure ✓, config ✓)
+- **WebSocket ingestion & buffering**: ✅ DONE (M2 ✓)
+- **Real-time analysis (Go)**: ✅ DONE (M3 ✓)
+  - Support/resistance calculation implemented
+  - Large order distribution analysis implemented
+  - HTTP API endpoint for reading analysis results
+- **Bytewax stream processing**: ⏳ TODO (M4)
+- **Storage integration (Redis / InfluxDB)**: 🔄 PARTIAL
+  - Redis: ✅ Analysis results storage complete
+  - InfluxDB: ⏳ TODO (async write path)
+- **API & backend monitoring service**: ✅ DONE (M6 Basic)
+  - Basic analysis API complete
+  - CORS middleware added
+  - Historical queries TODO
+- **Vue monitoring frontend**: ✅ DONE (M7 Complete)
+  - ✅ Vue 3 + Vite + TypeScript setup
+  - ✅ Element Plus + ECharts integration
+  - ✅ Support/Resistance card component
+  - ✅ Large Orders card with sentiment
+  - ✅ ECharts pie chart visualization
+  - ✅ WebSocket real-time push with automatic fallback
+  - ✅ Connection status indicator with mode display
+  - ✅ Auto-reconnection with exponential backoff
+  - ⏳ Historical data views (future)
+- **Deployment & observability**: ⏳ TODO (M8)
+
+### 6. Next Steps (Recommended Priority)
+
+**Option A: Continue M3/M6 - Complete API Layer**
+- Add health check endpoints (`/healthz`, `/readyz`)
+- Add CORS middleware for Vue frontend
+- Add `/api/pairs` endpoint to list active trading pairs
+- Add `/api/orderbook/{instrument_id}` to read latest order book snapshot
+
+**Option B: Start M4 - Bytewax Stream Processing**
+- Implement depth anomaly detection (Z-score based)
+- Implement liquidity shrinkage warning (multi-window regression)
+- Set up Bytewax dataflow to consume from Redis List
+- Write results to `analysis:depth_anomaly:{instrument_id}` and `analysis:liquidity_shrink:{instrument_id}`
+
+**Option C: Start M5 - InfluxDB Integration**
+- Set up InfluxDB dev instance
+- Implement async write worker in Go to persist analysis results to InfluxDB
+- Define retention policies and schemas
+- Add historical query API endpoints
+
+**Option D: Start M7 - Vue Dashboard (MVP)**
+- Bootstrap Vue 3 + Vite project
+- Create basic layout with Element Plus
+- Implement pair selector
+- Display support/resistance and large order data from API
+- Add simple ECharts visualization
+
+**Recommendation**: 
+- **Option A** (Complete API layer basics) - This provides a stable foundation for the Vue dashboard and makes testing easier.
+- Then proceed to **Option D** (Vue MVP) to get end-to-end visualization working.
+- Parallel track: **Option B** (Bytewax) can be developed independently as it uses separate Redis List input.
 
 > This file should be updated as implementation progresses: mark checklist items and milestone sections from TODO → IN_PROGRESS → DONE, and refine tasks as the architecture evolves.

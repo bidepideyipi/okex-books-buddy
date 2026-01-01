@@ -174,7 +174,7 @@ bytewax run analysis_flow.py
 
 #### 5. Start frontend (Vue monitoring app)
 
-> The `frontend/monitoring` directory is currently a placeholder. After scaffolding the Vue 3 app (e.g. via Vite), typical dev commands will look like:
+The Vue 3 dashboard is now fully implemented with real-time analysis visualization:
 
 ```bash
 cd /Users/anthony/Documents/github/okex-buddy/frontend/monitoring
@@ -182,7 +182,16 @@ npm install
 npm run dev
 ```
 
-The frontend will consume the APIs and WebSocket endpoints exposed by the Go API server, and display metrics and analysis results.
+The dashboard will be available at `http://localhost:5173` and automatically proxy API requests to the Go API server at `localhost:8080`.
+
+**Features:**
+- Real-time support/resistance level display
+- Large order distribution analysis with sentiment indicators
+- Interactive ECharts pie chart visualization
+- Auto-refresh every 2 seconds
+- Responsive design with Element Plus UI
+
+See [frontend/monitoring/README.md](frontend/monitoring/README.md) for detailed documentation.
 
 #### 6. Process overview in dev
 - **Go WebSocket client**: connects to OKEx WS, processes order book data, writes into Redis / InfluxDB.

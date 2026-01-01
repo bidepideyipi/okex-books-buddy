@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"log"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -373,4 +374,288 @@ func (m *Manager) GetTop400(instID string) (asks, bids []PriceLevel, err error) 
 	bids = book.Bids[:bidCount]
 
 	return asks, bids, nil
+}
+
+// ComputeSupportResistance computes support and resistance levels for a given instrument
+// based on the current in-memory order book.
+// The implementation is a simplified version of the PRD algorithm:
+//   - price range is divided into bins
+//   - per-bin notional volume is accumulated
+//   - local maxima above a significance threshold are selected and sorted
+func (m *Manager) ComputeSupportResistance(instID string, binCount int, significanceThreshold float64, topN int) (supports, resistances []float64, err error) {
+	asks, bids, err := m.GetTop400(instID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(asks) == 0 && len(bids) == 0 {
+		return nil, nil, fmt.Errorf("empty order book for %s", instID)
+	}
+
+	if binCount <= 0 {
+		binCount = 50
+	}
+	if topN <= 0 {
+		topN = 2
+	}
+	if significanceThreshold <= 0 {
+		significanceThreshold = 1.5
+	}
+
+	// Determine price range from bids and asks
+	minPrice := 0.0
+	maxPrice := 0.0
+	first := true
+
+	updateRange := func(levels []PriceLevel) {
+		for _, lvl := range levels {
+			p, err := strconv.ParseFloat(lvl.Price, 64)
+			if err != nil {
+				continue
+			}
+			if first {
+				minPrice, maxPrice = p, p
+				first = false
+			} else {
+				if p < minPrice {
+					minPrice = p
+				}
+				if p > maxPrice {
+					maxPrice = p
+				}
+			}
+		}
+	}
+
+	updateRange(bids)
+	updateRange(asks)
+
+	if first || maxPrice <= minPrice {
+		return nil, nil, fmt.Errorf("invalid price range for %s", instID)
+	}
+
+	binWidth := (maxPrice - minPrice) / float64(binCount)
+	if binWidth <= 0 {
+		return nil, nil, fmt.Errorf("invalid bin width for %s", instID)
+	}
+
+	bidVolumes := make([]float64, binCount)
+	askVolumes := make([]float64, binCount)
+
+	// Accumulate notional by bin for bids and asks
+	accumulate := func(levels []PriceLevel, vols []float64) {
+		for _, lvl := range levels {
+			p, err1 := strconv.ParseFloat(lvl.Price, 64)
+			q, err2 := strconv.ParseFloat(lvl.Size, 64)
+			if err1 != nil || err2 != nil || q <= 0 {
+				continue
+			}
+			notional := p * q
+			idx := int((p - minPrice) / binWidth)
+			if idx < 0 {
+				idx = 0
+			}
+			if idx >= binCount {
+				idx = binCount - 1
+			}
+			vols[idx] += notional
+		}
+	}
+
+	accumulate(bids, bidVolumes)
+	accumulate(asks, askVolumes)
+
+	// Helper to find peaks
+	findPeaks := func(vols []float64) []struct {
+		Index int
+		Value float64
+	} {
+		peaks := make([]struct {
+			Index int
+			Value float64
+		}, 0)
+
+		if len(vols) < 3 {
+			return peaks
+		}
+
+		// Compute average volume
+		total := 0.0
+		for _, v := range vols {
+			total += v
+		}
+		avg := total / float64(len(vols))
+
+		for i := 1; i < len(vols)-1; i++ {
+			v := vols[i]
+			if v <= 0 {
+				continue
+			}
+			if v > significanceThreshold*avg && v > vols[i-1] && v > vols[i+1] {
+				peaks = append(peaks, struct {
+					Index int
+					Value float64
+				}{Index: i, Value: v})
+			}
+		}
+
+		// Fallback: if no peaks, pick top bins by volume
+		if len(peaks) == 0 {
+			for i, v := range vols {
+				if v > 0 {
+					peaks = append(peaks, struct {
+						Index int
+						Value float64
+					}{Index: i, Value: v})
+				}
+			}
+		}
+
+		// Sort peaks by volume descending
+		sort.Slice(peaks, func(i, j int) bool {
+			return peaks[i].Value > peaks[j].Value
+		})
+
+		return peaks
+	}
+
+	bidPeaks := findPeaks(bidVolumes)
+	askPeaks := findPeaks(askVolumes)
+
+	binCenter := func(idx int) float64 {
+		return minPrice + (float64(idx)+0.5)*binWidth
+	}
+
+	// Collect top-N support levels from bids
+	for i := 0; i < len(bidPeaks) && i < topN; i++ {
+		supports = append(supports, binCenter(bidPeaks[i].Index))
+	}
+
+	// Collect top-N resistance levels from asks
+	for i := 0; i < len(askPeaks) && i < topN; i++ {
+		resistances = append(resistances, binCenter(askPeaks[i].Index))
+	}
+
+	return supports, resistances, nil
+}
+
+// ComputeLargeOrderDistribution computes large order distribution and sentiment
+// for a given instrument based on the current in-memory order book.
+// It implements a simplified version of PRD 3.3.2:
+//   - compute notional p*q for each price level
+//   - determine dynamic threshold by percentile
+//   - apply distance-based exponential decay weighting
+//   - aggregate weighted notional for bids (BullPower) and asks (BearPower)
+func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha float64, decayLambda float64, sentimentThreshold float64) (largeBuyNotional, largeSellNotional, sentiment float64, err error) {
+	asks, bids, err := m.GetTop400(instID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	if len(asks) == 0 && len(bids) == 0 {
+		return 0, 0, 0, fmt.Errorf("empty order book for %s", instID)
+	}
+
+	// Determine mid price from best bid / best ask
+	if len(bids) == 0 || len(asks) == 0 {
+		return 0, 0, 0, fmt.Errorf("cannot compute mid price for %s: missing bids or asks", instID)
+	}
+
+	bestBid, err1 := strconv.ParseFloat(bids[0].Price, 64)
+	bestAsk, err2 := strconv.ParseFloat(asks[0].Price, 64)
+	if err1 != nil || err2 != nil || bestBid <= 0 || bestAsk <= 0 {
+		return 0, 0, 0, fmt.Errorf("invalid best bid/ask for %s", instID)
+	}
+
+	mid := (bestBid + bestAsk) / 2.0
+	if mid <= 0 {
+		return 0, 0, 0, fmt.Errorf("invalid mid price for %s", instID)
+	}
+
+	// Collect notionals for percentile threshold
+	var notionals []float64
+
+	appendNotionals := func(levels []PriceLevel) {
+		for _, lvl := range levels {
+			p, err1 := strconv.ParseFloat(lvl.Price, 64)
+			q, err2 := strconv.ParseFloat(lvl.Size, 64)
+			if err1 != nil || err2 != nil || q <= 0 {
+				continue
+			}
+			n := p * q
+			if n <= 0 {
+				continue
+			}
+			notionals = append(notionals, n)
+		}
+	}
+
+	appendNotionals(bids)
+	appendNotionals(asks)
+
+	if len(notionals) == 0 {
+		// No meaningful orders; treat as no large orders
+		return 0, 0, 0, nil
+	}
+
+	if percentileAlpha <= 0 || percentileAlpha >= 1 {
+		percentileAlpha = 0.95
+	}
+	if decayLambda <= 0 {
+		decayLambda = 5.0
+	}
+	if sentimentThreshold <= 0 {
+		sentimentThreshold = 0.3
+	}
+
+	sort.Float64s(notionals)
+
+	idx := int(math.Floor(percentileAlpha * float64(len(notionals)-1)))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(notionals) {
+		idx = len(notionals) - 1
+	}
+	threshold := notionals[idx]
+
+	var bullPower, bearPower float64
+
+	// Helper to process one side
+	processSide := func(levels []PriceLevel, isBid bool) {
+		for _, lvl := range levels {
+			p, err1 := strconv.ParseFloat(lvl.Price, 64)
+			q, err2 := strconv.ParseFloat(lvl.Size, 64)
+			if err1 != nil || err2 != nil || q <= 0 {
+				continue
+			}
+			n := p * q
+			if n <= threshold {
+				continue
+			}
+
+			// Distance-based weight relative to mid price
+			w := math.Exp(-decayLambda * math.Abs(p-mid) / mid)
+
+			if isBid {
+				largeBuyNotional += n
+				bullPower += n * w
+			} else {
+				largeSellNotional += n
+				bearPower += n * w
+			}
+		}
+	}
+
+	processSide(bids, true)
+	processSide(asks, false)
+
+	totalPower := bullPower + bearPower
+	if totalPower == 0 {
+		return largeBuyNotional, largeSellNotional, 0, nil
+	}
+
+	sentiment = (bullPower - bearPower) / totalPower
+
+	return largeBuyNotional, largeSellNotional, sentiment, nil
 }

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bufio"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // RedisConfig holds Redis connection settings.
@@ -39,9 +42,13 @@ type AppConfig struct {
 }
 
 // LoadFromEnv loads configuration from environment variables.
-// It is designed to work with the *.env files under the config/ directory
-// (e.g. app.dev.env, influxdb.dev.env) once they are exported into the shell.
+// If not set, it will try to load from config/app.env file.
 func LoadFromEnv() AppConfig {
+	// Try to load from config file if env vars are not set
+	if os.Getenv("REDIS_ADDR") == "" {
+		loadEnvFile("config/app.env")
+	}
+
 	return AppConfig{
 		Redis: RedisConfig{
 			Addr:            getenvWithDefault("REDIS_ADDR", "localhost:6379"),
@@ -63,6 +70,56 @@ func LoadFromEnv() AppConfig {
 		},
 		APIHTTPAddr:       getenvWithDefault("API_HTTP_ADDR", "0.0.0.0:8080"),
 		FrontendDevServer: os.Getenv("FRONTEND_DEV_SERVER"),
+	}
+}
+
+// loadEnvFile loads environment variables from a .env file
+func loadEnvFile(filePath string) {
+	// Get absolute path
+	absPath := filePath
+	if !filepath.IsAbs(filePath) {
+		if wd, err := os.Getwd(); err == nil {
+			// Try workspace root
+			rootPath := filepath.Join(wd, "../..", filePath)
+			if _, err := os.Stat(rootPath); err == nil {
+				absPath = rootPath
+			} else {
+				// Try current directory
+				curPath := filepath.Join(wd, filePath)
+				if _, err := os.Stat(curPath); err == nil {
+					absPath = curPath
+				}
+			}
+		}
+	}
+
+	file, err := os.Open(absPath)
+	if err != nil {
+		return // File not found, use defaults or existing env vars
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse KEY=VALUE
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Only set if not already in environment
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
 	}
 }
 

@@ -152,24 +152,25 @@ graph TB
 
 #### 4.2.6 Vue监控模块
 
-- **职责**：提供WebSocket相关指标和实时分析结果的可视化监控界面
+- **职责**：提供 WebSocket 连接状态的可视化监控界面
 - **技术实现**：Vue.js 3.x + Element Plus + ECharts
 - **核心功能**：
-  - WebSocket连接状态监控（连接数、断开次数、重连状态）
-  - 数据传输指标监控（吞吐量、延迟、数据包大小）
-  - 交易对监控状态展示
-  - 实时分析结果可视化（支撑位/阻力位、大额订单分布）
-  - 异常告警实时展示
-  - 历史数据趋势分析
+  - **WebSocket 连接状态监控**
+    - 显示当前连接状态（已连接/未连接/重连中）
+    - 显示连接的 WebSocket URL
+    - 显示连接建立时间
+    - 显示最后一次消息接收时间
+    - 显示重连次数统计
+  - **实时分析结果展示**
+    - 支撑位/阻力位可视化
+    - 大额订单分布图表
 - **数据来源**：
-  - 实时分析结果：通过API从Redis Hash结构读取
-  - 历史数据：通过API从InfluxDB读取
-  - 实时指标：通过WebSocket推送
+  - WebSocket 连接状态：通过后端 API 获取
+  - 实时分析结果：通过 WebSocket 推送或 HTTP API 轮询
 - **技术特性**：
   - 响应式设计，支持多设备访问
-  - 实时数据更新（WebSocket推送）
-  - 可自定义监控面板
-  - 支持数据导出和报表生成
+  - 实时数据更新
+  - 连接状态自动刷新（每 5 秒）
 
 #### 4.2.7 InfluxDB存储模块
 
@@ -255,11 +256,11 @@ graph TB
 
 #### 5.2.4 Vue监控模块交互流程
 
-1. 用户通过浏览器访问Vue监控应用
-2. Vue应用建立WebSocket连接到后端监控服务
-3. 后端监控服务推送实时指标数据到Vue应用
-4. Vue应用使用ECharts渲染实时图表和监控面板
-5. 用户可以自定义监控面板、查看历史数据或导出报表
+1. 用户通过浏览器访问 Vue 监控应用
+2. Vue 应用通过 HTTP API 定期获取 WebSocket 连接状态信息
+3. Vue 应用建立 WebSocket 连接接收实时分析数据
+4. Vue 应用使用 ECharts 渲染实时图表和连接状态面板
+5. 连接状态每 5 秒自动刷新
 
 #### 5.2.5 动态订阅管理流程
 
@@ -1083,6 +1084,10 @@ run(df)
 
 ## 14. Redis Hash结构设计
 
+### 14.0 说明
+
+本章节定义了系统使用的 Redis Hash 数据结构。
+
 ### 14.1 订单簿数据Hash（key: orderbook:）
 
 | 字段名           | 数据类型 | 描述                            |
@@ -1162,66 +1167,268 @@ SCARD config:trading_pairs
 | redis_memory_usage     | string   | Redis内存使用情况    |
 | influxdb_write_rate    | string   | InfluxDB写入速率     |
 
-## 15. 风险与应对
+## 15. WebSocket 监控 API 设计
 
-### 15.1 技术风险
+### 15.1 API 概述
 
-#### 15.1.1 高并发数据处理风险
+为 Vue 监控模块提供 RESTful API，用于获取 WebSocket 连接状态和分析结果。
+
+### 15.2 WebSocket 连接状态查询 API
+
+#### 15.2.1 获取所有 WebSocket 连接状态
+
+**接口地址**：`GET /api/websocket/status`
+
+**请求参数**：无
+
+**响应参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| code | int | 是 | 响应状态码，200 表示成功 |
+| message | string | 是 | 响应消息 |
+| data | object | 是 | 连接状态数据 |
+
+**data 对象结构**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| total_connections | int | 是 | 总连接数 |
+| active_pairs | int | 是 | 活跃交易对数量 |
+| connections | array | 是 | 连接详情列表 |
+
+**connections 数组元素结构**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
+| websocket_url | string | 是 | WebSocket 连接地址 |
+| status | string | 是 | 连接状态：connected/disconnected/reconnecting |
+| connected_at | string | 是 | 连接建立时间（RFC3339 格式） |
+| last_message_at | string | 是 | 最后一次消息接收时间（RFC3339 格式） |
+| reconnect_count | int | 是 | 重连次数 |
+| messages_received | int | 是 | 已接收消息总数 |
+| last_error | string | 否 | 最后一次错误信息（如有） |
+
+**响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total_connections": 3,
+    "active_pairs": 3,
+    "connections": [
+      {
+        "instrument_id": "BTC-USDT",
+        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
+        "status": "connected",
+        "connected_at": "2026-01-01T10:00:00Z",
+        "last_message_at": "2026-01-01T10:05:30Z",
+        "reconnect_count": 0,
+        "messages_received": 1523,
+        "last_error": ""
+      },
+      {
+        "instrument_id": "ETH-USDT",
+        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
+        "status": "connected",
+        "connected_at": "2026-01-01T10:00:05Z",
+        "last_message_at": "2026-01-01T10:05:29Z",
+        "reconnect_count": 1,
+        "messages_received": 1487,
+        "last_error": ""
+      },
+      {
+        "instrument_id": "SOL-USDT",
+        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
+        "status": "reconnecting",
+        "connected_at": "2026-01-01T10:00:10Z",
+        "last_message_at": "2026-01-01T10:04:15Z",
+        "reconnect_count": 3,
+        "messages_received": 1234,
+        "last_error": "connection timeout"
+      }
+    ]
+  }
+}
+```
+
+#### 15.2.2 获取单个交易对的 WebSocket 连接状态
+
+**接口地址**：`GET /api/websocket/status/{instrument_id}`
+
+**路径参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
+
+**响应参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| code | int | 是 | 响应状态码，200 表示成功，404 表示未找到 |
+| message | string | 是 | 响应消息 |
+| data | object | 是 | 连接状态数据（结构同上 connections 数组元素） |
+
+**响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "instrument_id": "BTC-USDT",
+    "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
+    "status": "connected",
+    "connected_at": "2026-01-01T10:00:00Z",
+    "last_message_at": "2026-01-01T10:05:30Z",
+    "reconnect_count": 0,
+    "messages_received": 1523,
+    "last_error": ""
+  }
+}
+```
+
+### 15.3 实时分析结果查询 API
+
+#### 15.3.1 获取交易对分析结果
+
+**接口地址**：`GET /api/analysis/{instrument_id}`
+
+**路径参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
+
+**响应参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| code | int | 是 | 响应状态码 |
+| message | string | 是 | 响应消息 |
+| data | object | 是 | 分析结果数据 |
+
+**data 对象结构**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| instrument_id | string | 是 | 交易对标识 |
+| support_resistance | object | 否 | 支撑位/阻力位数据 |
+| large_orders | object | 否 | 大额订单数据 |
+
+**响应示例**：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "instrument_id": "BTC-USDT",
+    "support_resistance": {
+      "instrument_id": "BTC-USDT",
+      "analysis_time": "1735689600",
+      "support_level_1": "42000.50",
+      "support_level_2": "41500.25",
+      "resistance_level_1": "43000.75",
+      "resistance_level_2": "43500.00"
+    },
+    "large_orders": {
+      "instrument_id": "BTC-USDT",
+      "analysis_time": "1735689600",
+      "large_buy_orders": "1250000.00",
+      "large_sell_orders": "980000.00",
+      "large_order_trend": "bullish"
+    }
+  }
+}
+```
+
+### 15.4 错误响应格式
+
+所有 API 错误响应统一格式：
+
+```json
+{
+  "code": 500,
+  "message": "Internal server error",
+  "data": null
+}
+```
+
+**常见错误码**：
+
+| 错误码 | 说明 |
+|--------|------|
+| 200 | 成功 |
+| 400 | 请求参数错误 |
+| 404 | 资源不存在 |
+| 500 | 服务器内部错误 |
+| 503 | 服务暂时不可用 |
+
+## 16. 风险与应对
+
+### 16.1 技术风险
+
+#### 16.1.1 高并发数据处理风险
 
 - **风险**：大量交易对同时监控可能导致系统负载过高
 - **应对**：优化算法、增加资源、实施限流策略
 
-#### 15.1.2 外部依赖风险
+#### 16.1.2 外部依赖风险
 
 - **风险**：OKEx API变更或不可用影响系统功能
 - **应对**：建立API监控机制、实现兼容性处理、准备备用方案
 
-#### 15.1.3 数据一致性风险
+#### 16.1.3 数据一致性风险
 
 - **风险**：增量数据处理错误导致订单簿状态不一致
 - **应对**：定期同步完整数据、实施数据验证机制
 
-#### 15.1.4 Redis List集成风险
+#### 16.1.4 Redis List集成风险
 
 - **风险**：Bytewax与Redis List集成可能出现数据丢失或处理不及时
 - **应对**：实现可靠的消费机制、建立数据一致性检查、定期备份数据
 
-### 15.2 业务风险
+### 16.2 业务风险
 
-#### 15.2.1 分析结果准确性风险
+#### 16.2.1 分析结果准确性风险
 
 - **风险**：分析算法误差导致决策错误
 - **应对**：持续优化算法、建立结果验证机制
 
-#### 15.2.2 系统延迟风险
+#### 16.2.2 系统延迟风险
 
 - **风险**：延迟超过阈值影响业务决策
 - **应对**：优化系统性能、实施延迟监控、建立预警机制
 
-## 16. 动态订阅管理设计总结
+## 17. 动态订阅管理设计总结
 
-### 16.1 设计概述
+### 17.1 设计概述
 
 系统通过Redis Set结构（`config:trading_pairs`）实现交易对的动态订阅管理，外部系统可通过修改此key来动态调整WebSocket客户端的订阅范围，无需重启服务。
 
-### 16.2 核心组件
+### 17.2 核心组件
 
-#### 16.2.1 Redis配置Key
+#### 17.2.1 Redis配置Key
 
 - **Key名称**：`config:trading_pairs`（可通过环境变量 `REDIS_TRADING_PAIRS_KEY` 配置）
 - **数据结构**：Set
 - **存储内容**：交易对标识符列表（如 `BTC-USDT`, `ETH-USDT`）
 - **容量限制**：最多10个交易对
 
-#### 16.2.2 轮询机制
+#### 17.2.2 轮询机制
 
 - **轮询间隔**：20秒（可通过环境变量 `TRADING_PAIRS_POLL_INTERVAL` 配置）
 - **触发方式**：定时器（Timer）触发
 - **检测逻辑**：集合差异对比
 
-### 16.3 工作流程
+### 17.3 工作流程
 
-#### 16.3.1 系统启动流程
+#### 17.3.1 系统启动流程
 
 ```mermaid
 flowchart TD
@@ -1237,7 +1444,7 @@ flowchart TD
     I --> J["开始监听配置变化"]
 ```
 
-#### 16.3.2 配置变化检测流程
+#### 17.3.2 配置变化检测流程
 
 ```mermaid
 flowchart TD
@@ -1255,9 +1462,9 @@ flowchart TD
     K --> G
 ```
 
-### 16.4 外部系统操作示例
+### 17.4 外部系统操作示例
 
-#### 16.4.1 添加交易对
+#### 17.4.1 添加交易对
 
 ```bash
 # 添加单个交易对
@@ -1267,7 +1474,7 @@ redis-cli SADD config:trading_pairs BTC-USDT
 redis-cli SADD config:trading_pairs BTC-USDT ETH-USDT SOL-USDT
 ```
 
-#### 16.4.2 移除交易对
+#### 17.4.2 移除交易对
 
 ```bash
 # 移除单个交易对
@@ -1277,7 +1484,7 @@ redis-cli SREM config:trading_pairs SOL-USDT
 redis-cli SREM config:trading_pairs SOL-USDT DOGE-USDT
 ```
 
-#### 16.4.3 查看当前配置
+#### 17.4.3 查看当前配置
 
 ```bash
 # 查看所有交易对
@@ -1290,7 +1497,7 @@ redis-cli SCARD config:trading_pairs
 redis-cli SISMEMBER config:trading_pairs BTC-USDT
 ```
 
-#### 16.4.4 完全替换配置
+#### 17.4.4 完全替换配置
 
 ```bash
 # 删除所有旧配置
@@ -1300,7 +1507,7 @@ redis-cli DEL config:trading_pairs
 redis-cli SADD config:trading_pairs BTC-USDT ETH-USDT MATIC-USDT
 ```
 
-### 16.5 异常处理策略
+### 17.5 异常处理策略
 
 | 异常场景              | 处理策略                                             |
 | --------------------- | ---------------------------------------------------- |
@@ -1311,7 +1518,7 @@ redis-cli SADD config:trading_pairs BTC-USDT ETH-USDT MATIC-USDT
 | 退订失败              | 重试最多3次，失败后强制从内存移除，记录告警          |
 | OKEx WebSocket断连    | 触发自动重连机制，重连后重新订阅当前配置的交易对     |
 
-### 16.6 监控指标
+### 17.6 监控指标
 
 系统会在 `system:monitoring` Hash中更新以下指标：
 
@@ -1320,7 +1527,7 @@ redis-cli SADD config:trading_pairs BTC-USDT ETH-USDT MATIC-USDT
 - `last_config_check`：最后一次配置检查时间
 - `subscription_changes`：订阅变更次数（累计）
 
-### 16.7 配置文件示例
+### 17.7 配置文件示例
 
 **开发环境** (`config/app.dev.env`)：
 
@@ -1340,7 +1547,7 @@ REDIS_TRADING_PAIRS_KEY=config:trading_pairs
 TRADING_PAIRS_POLL_INTERVAL=20
 ```
 
-### 16.8 设计优势
+### 17.8 设计优势
 
 1. **无需重启**：外部系统修改Redis配置后，最多20秒内生效，无需重启WebSocket客户端
 2. **解耦合**：订阅管理与业务逻辑分离，外部系统通过标准Redis命令操作
