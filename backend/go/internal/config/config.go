@@ -16,6 +16,8 @@ type RedisConfig struct {
 // OKEXConfig holds OKEx WebSocket endpoint configuration.
 type OKEXConfig struct {
 	PublicWSURL string
+	UseProxy    bool
+	ProxyAddr   string
 }
 
 // InfluxConfig holds InfluxDB 2.x connection configuration.
@@ -49,6 +51,8 @@ func LoadFromEnv() AppConfig {
 		},
 		OKEX: OKEXConfig{
 			PublicWSURL: getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
+			UseProxy:    getenvBoolWithDefault("USE_PROXY", false),
+			ProxyAddr:   os.Getenv("PROXY_ADDR"),
 		},
 		Influx: InfluxConfig{
 			URL:      os.Getenv("INFLUX_URL"),
@@ -73,6 +77,15 @@ func getenvIntWithDefault(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return def
+}
+
+func getenvBoolWithDefault(key string, def bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return def

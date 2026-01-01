@@ -16,11 +16,11 @@
   - [x] Define common configuration & environments (dev / test / prod)
   - [x] Unified config loading module in Go (`backend/go/internal/config`)
 - **M2 – WebSocket Ingestion (Go)**
-  - [ ] Implement OKEx WebSocket client (multi-pair support, reconnect)
-  - [ ] Implement order book snapshot / incremental handling & checksum validation
-  - [ ] Implement data validation module
-  - [ ] Push normalized events into Redis List (message buffer)
-  - [ ] Store latest 400-depth snapshot per pair into Redis Hash
+  - [x] Implement OKEx WebSocket client (multi-pair support, reconnect)
+  - [x] Implement order book snapshot / incremental handling & checksum validation
+  - [x] Implement data validation module
+  - [x] Push normalized events into Redis List (message buffer)
+  - [x] Store latest 400-depth snapshot per pair into Redis Hash
 - **M3 – Real-Time Analysis (Go in-memory path)**
   - [ ] Internal in-memory buffering for low-latency path
   - [ ] Support / resistance level calculation
@@ -152,7 +152,7 @@
 ### 5. Current Overall Status
 
 - **Foundations**: DONE (repo structure ✓, config ✓)
-- **WebSocket ingestion & buffering**: TODO
+- **WebSocket ingestion & buffering**: DONE (M2 ✓)
 - **Real-time analysis (Go)**: TODO
 - **Bytewax stream processing**: TODO
 - **Storage integration (Redis / InfluxDB)**: TODO

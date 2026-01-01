@@ -1,6 +1,118 @@
 ## okex-buddy
 
-### Local Development (dev)
+### Local Development
+
+### Prerequisites
+
+- Go 1.20+
+- Redis 6.x (running on localhost:6379)
+- Python 3.9+ (for Bytewax, later milestones)
+- Node.js 16+ (for Vue frontend, later milestones)
+
+### M2 - WebSocket Client Setup
+
+#### Proxy Configuration
+
+The WebSocket client supports SOCKS5 proxy for local development:
+
+- **Development (local)**: Enable proxy in `config/app.dev.env`
+  ```bash
+  USE_PROXY=true
+  PROXY_ADDR=127.0.0.1:4781
+  ```
+
+- **Production (Hong Kong server)**: Disable proxy in `config/app.prod.env`
+  ```bash
+  USE_PROXY=false
+  PROXY_ADDR=
+  ```
+
+The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
+
+#### Setup Steps
+
+1. **Start Redis** (required for M2)
+   ```bash
+   redis-server
+   ```
+
+2. **Configure trading pairs in Redis**
+   ```bash
+   # Add trading pairs to monitor (use SWAP contracts for real-time data)
+   redis-cli SADD trading_pairs:active BTC-USDT-SWAP ETH-USDT-SWAP
+   
+   # Verify configuration
+   redis-cli SMEMBERS trading_pairs:active
+   ```
+
+3. **Start WebSocket Client**
+   ```bash
+   cd /Users/anthony/Documents/github/okex-buddy
+   
+   # Load environment variables
+   export $(grep -v '^#' config/app.dev.env | xargs)
+   export $(grep -v '^#' config/influxdb.dev.env | xargs)
+   
+   # Run WebSocket client
+   cd backend/go
+   go run ./cmd/websocket_client
+   ```
+
+   **Expected output:**
+   ```
+   2026/01/01 10:10:55 Subscription confirmed: BTC-USDT-SWAP
+   2026/01/01 10:10:55 Subscription confirmed: ETH-USDT-SWAP
+   ```
+
+4. **Verify subscription success**
+   
+   After the WebSocket client starts and subscriptions are confirmed, verify that order book data is being received:
+   
+   ```bash
+   # Check order book snapshot (first 25 lines show metadata and first few price levels)
+   redis-cli -h localhost -p 6379 HGETALL orderbook:BTC-USDT-SWAP | head -25
+   
+   # Expected output includes:
+   # - instrument_id: BTC-USDT-SWAP
+   # - checksum: <int32 value>
+   # - asks: [array of ask price levels]
+   # - bids: [array of bid price levels]
+   # - timestamp: <unix timestamp>
+   
+   # Check real-time event stream length
+   redis-cli LLEN orderbook:events
+   # Should show increasing numbers as updates arrive
+   ```
+   
+   If you see order book data with valid checksums and increasing event counts, the subscription is working correctly!
+
+5. **Monitor in real-time**
+   ```bash
+   # Watch order book updates in Redis
+   redis-cli MONITOR
+   
+   # Check order book snapshot for a specific pair
+   redis-cli HGETALL orderbook:BTC-USDT-SWAP
+   
+   # Check system monitoring
+   redis-cli HGETALL system:monitoring
+   
+   # View event stream
+   redis-cli LRANGE orderbook:events 0 10
+   ```
+
+6. **Test dynamic subscription**
+   ```bash
+   # Add a new trading pair (will be subscribed in ~20 seconds)
+   redis-cli SADD trading_pairs:active SOL-USDT-SWAP
+   
+   # Remove a trading pair (will be unsubscribed in ~20 seconds)
+   redis-cli SREM trading_pairs:active ETH-USDT-SWAP
+   ```
+
+### Original Dev Setup (M1)
+
+For reference, the original M1 setup instructions: (dev)
 
 #### 1. Prerequisites
 - **Golang**: 1.20+
