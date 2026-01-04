@@ -16,6 +16,7 @@ export interface LargeOrderData {
   analysis_time: string
   large_buy_orders?: string
   large_sell_orders?: string
+  sentiment?: string
   large_order_trend?: 'bullish' | 'bearish' | 'neutral'
 }
 

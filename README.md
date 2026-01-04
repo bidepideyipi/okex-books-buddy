@@ -80,7 +80,7 @@ The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
    # - timestamp: <unix timestamp>
    
    # Check real-time event stream length
-   redis-cli LLEN orderbook:events
+   redis-cli LLEN list:orderbook:events
    # Should show increasing numbers as updates arrive
    ```
    
@@ -98,7 +98,7 @@ The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
    redis-cli HGETALL system:monitoring
    
    # View event stream
-   redis-cli LRANGE orderbook:events 0 10
+   redis-cli LRANGE list:orderbook:events 0 10
    ```
 
 6. **Test dynamic subscription**

@@ -546,7 +546,7 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 //   - determine dynamic threshold by percentile
 //   - apply distance-based exponential decay weighting
 //   - aggregate weighted notional for bids (BullPower) and asks (BearPower)
-func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha float64, decayLambda float64, sentimentThreshold float64) (largeBuyNotional, largeSellNotional, sentiment float64, err error) {
+func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha float64, decayLambda float64, sentimentDeadzoneThreshold float64) (largeBuyNotional, largeSellNotional, sentiment float64, err error) {
 	asks, bids, err := m.GetTop400(instID)
 	if err != nil {
 		return 0, 0, 0, err
@@ -604,8 +604,8 @@ func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha f
 	if decayLambda <= 0 {
 		decayLambda = 5.0
 	}
-	if sentimentThreshold <= 0 {
-		sentimentThreshold = 0.3
+	if sentimentDeadzoneThreshold <= 0 {
+		sentimentDeadzoneThreshold = 0.3
 	}
 
 	sort.Float64s(notionals)
@@ -655,7 +655,45 @@ func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha f
 		return largeBuyNotional, largeSellNotional, 0, nil
 	}
 
-	sentiment = (bullPower - bearPower) / totalPower
+	// Compute raw sentiment
+	rawSentiment := (bullPower - bearPower) / totalPower
 
-	return largeBuyNotional, largeSellNotional, sentiment, nil
+	// Non-linear sentiment transformation with deadzone threshold
+	var transformedSentiment float64
+	if math.Abs(rawSentiment) <= sentimentDeadzoneThreshold {
+		// Within deadzone: linear transformation to 0-0.3 range
+		transformedSentiment = (rawSentiment / sentimentDeadzoneThreshold) * 0.3
+	} else {
+		// Outside deadzone: scale remaining sentiment to 0.3-1.0 range
+		baseSentiment := math.Copysign(sentimentDeadzoneThreshold, rawSentiment)
+		remainingSentiment := rawSentiment - baseSentiment
+		transformedSentiment = baseSentiment*0.3 + (remainingSentiment/(1-sentimentDeadzoneThreshold))*0.7
+	}
+
+	//sentiment = transformedSentiment
+
+	// // Add colored logging based on sentiment value
+	// colorReset := "\033[0m"
+	// colorGreen := "\033[32m"
+	// colorRed := "\033[31m"
+	// colorYellow := "\033[33m"
+
+	// var color string
+	// if sentiment >= sentimentDeadzoneThreshold {
+	// 	color = colorGreen
+	// } else if sentiment <= -sentimentDeadzoneThreshold {
+	// 	color = colorRed
+	// } else {
+	// 	color = colorYellow
+	// }
+
+	// log.Printf("%s%s - Sentiment: %.4f | Large Buy: %.2f | Large Sell: %.2f%s",
+	// 	color,
+	// 	instID,
+	// 	sentiment,
+	// 	largeBuyNotional,
+	// 	largeSellNotional,
+	// 	colorReset)
+
+	return largeBuyNotional, largeSellNotional, transformedSentiment, nil
 }

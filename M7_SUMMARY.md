@@ -172,8 +172,9 @@ npm run dev
 
 ### Large Orders Card
 - Market sentiment indicator (🐂 Bullish / 🐻 Bearish / ⚖️ Neutral)
-- Buy order volume in USDT
-- Sell order volume in USDT
+- BullPower (weighted large buy order volume in USDT)
+- BearPower (weighted large sell order volume in USDT)
+- Sentiment value with interpretation
 - Visual balance bar showing buy/sell ratio
 - Percentage breakdown
 

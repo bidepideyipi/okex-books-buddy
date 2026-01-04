@@ -1,5 +1,9 @@
 package wshub
 
+/*hub.go 是OKEx订单簿实时分析系统中连接前端和后端的关键组件，
+实现了高效、可靠的WebSocket连接管理和消息通信机制，为实时数据展示提供了技术支持。
+它确保了前端监控界面能够实时接收最新的订单簿分析结果，同时支持动态订阅和资源优化。
+*/
 import (
 	"encoding/json"
 	"log"
@@ -58,6 +62,13 @@ func NewHub() *Hub {
 }
 
 // Run starts the hub's main loop
+/*
+Run() 函数启动主循环：
+├── 处理客户端注册/注销
+├── 广播消息到所有客户端
+├── 定期发送ping心跳
+└── 管理连接生命周期
+*/
 func (h *Hub) Run() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -161,6 +172,14 @@ func (c *Client) Unsubscribe(instrumentID string) {
 }
 
 // readPump reads messages from the WebSocket connection
+/*
+readPump() 函数负责从 WebSocket 连接读取消息：
+├── 设置读取超时
+├── 处理 pong 心跳响应
+├── 解析 JSON 消息
+├── 处理订阅/取消订阅请求
+└── 处理其他消息类型
+*/
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
@@ -204,6 +223,13 @@ func (c *Client) readPump() {
 }
 
 // writePump writes messages to the WebSocket connection
+/*
+writePump() 函数负责将消息发送到 WebSocket 连接：
+├── 从send通道获取消息
+├── 发送到WebSocket连接
+├── 定期发送ping消息
+└── 错误处理与连接关闭
+*/
 func (c *Client) writePump() {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {

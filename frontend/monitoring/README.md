@@ -139,7 +139,8 @@ The dashboard connects to the Go backend via both REST API and WebSocket:
       "analysis_time": "1735689600",
       "large_buy_orders": "1250000.00",
       "large_sell_orders": "980000.00",
-      "large_order_trend": "bullish"
+      "sentiment": "0.123",
+      "large_order_trend": "neutral"
     }
   }
 }

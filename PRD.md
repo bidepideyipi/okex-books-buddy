@@ -72,6 +72,13 @@
 - 当订单簿中可交易深度（尤其是靠近当前价格的订单数量）显著减少时，系统触发预警
 - 预警应提示用户当前市场流动性风险增加
 
+#### 3.2.5 交易信号生成
+
+- 系统基于大额订单分布分析的情绪指标生成交易信号
+- 当Sentiment >= 0.3（强烈看涨）或Sentiment <= -0.3（强烈看跌）时，生成交易信号事件
+- 交易信号包含交易对、信号值、多/空方向、触发时间、信号源类型等信息
+- 交易信号事件写入Redis List，支持下游系统订阅和消费
+
 ### 3.3 算法与逻辑详解
 
 #### 3.3.1 支撑位与阻力位计算算法
@@ -148,7 +155,7 @@ graph TB
 
 #### 3.3.2 大额订单分布与主力多空判断算法
 
-**算法原理：** 通过识别大额订单（whale orders）的分布，推断机构或大户的交易意图。
+**算法原理：** 通过识别大额订单（whale orders）的分布，推断机构或大户的交易意图，并使用非线性变换模型计算更准确的市场情绪指标。
 
 **计算步骤：**
 
@@ -187,13 +194,27 @@ graph TB
    \text{BearPower} = \sum_{(p,q) \in \text{LargeAsks}} w(p) \cdot p \cdot q
    $$
 
-   多空倾向指标：
+   原始多空倾向指标：
 
    $$
-   \text{Sentiment} = \frac{\text{BullPower} - \text{BearPower}}{\text{BullPower} + \text{BearPower}}
+   \text{RawSentiment} = \frac{\text{BullPower} - \text{BearPower}}{\text{BullPower} + \text{BearPower}}
    $$
 
-   其中 $\text{Sentiment} \in [-1, 1]$：
+5. **非线性情绪变换**
+
+   为了更准确地反映市场情绪的强度，使用带有死区阈值的非线性变换模型：
+
+   $$
+   \text{Sentiment} = \begin{cases}
+   \frac{\text{RawSentiment}}{\text{sentimentDeadzoneThreshold}} \times 0.3 & \text{if } |\text{RawSentiment}| \leq \text{sentimentDeadzoneThreshold} \\
+   \text{Copysign}(\text{sentimentDeadzoneThreshold}, \text{RawSentiment}) \times 0.3 + \\ 
+   \frac{\text{RawSentiment} - \text{Copysign}(\text{sentimentDeadzoneThreshold}, \text{RawSentiment})}{1 - \text{sentimentDeadzoneThreshold}} \times 0.7 & \text{otherwise}
+   \end{cases}
+   $$
+
+   其中 $\text{sentimentDeadzoneThreshold}$ 为死区阈值（建议 0.2-0.4），$\text{Copysign}(a, b)$ 返回 $a$ 的绝对值和 $b$ 的符号。
+
+   变换后的 $\text{Sentiment} \in [-1, 1]$：
 
    - $> 0.3$：偏多（主力看涨）
    - $[-0.3, 0.3]$：中性
@@ -213,20 +234,23 @@ graph TB
     G --> I[分离大额卖单]
     H --> J[计算加权买单总金额]
     I --> K[计算加权卖单总金额]
-    J --> L[计算多空倾向指标]
+    J --> L[计算原始多空倾向指标]
     K --> L
-    L --> M{Sentiment > 0.3?}
-    M -->|是| N[主力偏多]
-    M -->|否| O{Sentiment < -0.3?}
-    O -->|是| P[主力偏空]
-    O -->|否| Q[中性]
+    L --> M[非线性情绪变换]
+    M --> N{Sentiment > 0.3?}
+    N -->|是| O[主力偏多]
+    N -->|否| P{Sentiment < -0.3?}
+    P -->|是| Q[主力偏空]
+    P -->|否| R[中性]
+    O --> S[生成交易信号]
+    Q --> S
 ```
 
 **参数配置：**
 
 - `percentile_alpha`: 90-95（大额订单百分位阈值）
 - `decay_lambda`: 5-10（距离衰减系数）
-- `sentiment_threshold`: 0.3（多空判断阈值）
+- `sentimentDeadzoneThreshold`: 0.2-0.4（情绪死区阈值）
 
 ---
 

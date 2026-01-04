@@ -1,0 +1,6 @@
+- 不要修改代码，除非我明确要求（我会说：请帮我编码实现）
+- 这是一个复杂工程，不要试图一口气完成，而是分步骤进行，具体的进度在PROJECT_STATUS.md中
+- 每次编码不能超过PROJECT_STATUS.md中的一个节点，不能跨节点编码
+- 不能做PROJECT_STATUS.md中未列出的任务
+- 不能同时修改PRD.md、PROJECT_STATUS.md、ARCHITECTURE.md
+- 不能同时修改文档和代码

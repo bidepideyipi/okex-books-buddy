@@ -8,6 +8,22 @@ import (
 	"strings"
 )
 
+// 定义颜色常量
+const (
+	Reset  = "\033[0m"
+	Red    = "\033[31m"
+	Green  = "\033[32m"
+	Yellow = "\033[33m"
+	Blue   = "\033[34m"
+)
+
+// RedisKey
+const (
+	TradingPairsKey           = "config:trading_pairs"  //运行时会去订阅的交易对
+	PublishOrderBookEventKey  = "list:orderbook:events" //订单薄事件
+	PublishTradeSigleEventKey = "list:sigle:events"     //信号事件
+)
+
 // RedisConfig holds Redis connection settings.
 type RedisConfig struct {
 	Addr            string

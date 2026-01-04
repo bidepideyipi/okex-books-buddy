@@ -134,6 +134,7 @@ func (c *Client) StoreLargeOrderDistribution(instID string, largeBuyNotional, la
 		"analysis_time":     time.Now().Unix(),
 		"large_buy_orders":  largeBuyNotional,
 		"large_sell_orders": largeSellNotional,
+		"sentiment":         sentiment,
 		"large_order_trend": trend,
 	}
 

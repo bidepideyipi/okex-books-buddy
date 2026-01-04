@@ -37,6 +37,16 @@
         >
           {{ getSentimentLabel(data.large_order_trend) }}
         </el-tag>
+        <div class="sentiment-details">
+          <div class="sentiment-value">
+            <span class="label">Sentiment:</span>
+            <span class="value">{{ formatSentiment(data.sentiment) }}</span>
+          </div>
+          <div class="sentiment-indicator">
+            <span class="label">Indicator:</span>
+            <span class="value">{{ getSentimentInterpretation(data.sentiment) }}</span>
+          </div>
+        </div>
       </div>
 
       <el-divider />
@@ -148,6 +158,23 @@ function getSellPercentage(data: LargeOrderData): number {
   const total = buy + sell
   return total > 0 ? (sell / total) * 100 : 50
 }
+
+function formatSentiment(sentiment?: string): string {
+  if (!sentiment) return '0.00'
+  const num = parseFloat(sentiment)
+  if (isNaN(num)) return sentiment
+  return num.toFixed(3)
+}
+
+function getSentimentInterpretation(sentiment?: string): string {
+  if (!sentiment) return 'Neutral'
+  const num = parseFloat(sentiment)
+  if (isNaN(num)) return 'Unknown'
+  
+  if (num > 0.3) return 'Bullish (Strong buying pressure)'
+  if (num < -0.3) return 'Bearish (Strong selling pressure)'
+  return 'Neutral (Balanced market)'
+}
 </script>
 
 <style scoped>
@@ -199,6 +226,34 @@ function getSellPercentage(data: LargeOrderData): number {
 .sentiment-tag {
   font-size: 18px;
   padding: 12px 24px;
+  margin-bottom: 12px;
+}
+
+.sentiment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.sentiment-value,
+.sentiment-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.sentiment-value .label,
+.sentiment-indicator .label {
+  font-weight: 600;
+  color: #909399;
+}
+
+.sentiment-value .value,
+.sentiment-indicator .value {
+  font-weight: 500;
+  color: #303133;
 }
 
 .distribution-section {

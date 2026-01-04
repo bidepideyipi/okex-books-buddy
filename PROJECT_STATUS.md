@@ -83,8 +83,13 @@
   - [x] Implement simple price level clustering / aggregation
   - [x] Define thresholds & configuration (per pair)
 - **Large Order Distribution**
-  - [x] Identify "large" orders by configurable size
-  - [x] Aggregate by price zones and side (buy/sell)
+  - [x] Identify orders above percentile threshold
+  - [x] Apply distance-based weighting (exponential decay from mid price)
+  - [x] Calculate BullPower (weighted large buy orders) and BearPower (weighted large sell orders)
+  - [x] Calculate sentiment indicator: (BullPower - BearPower) / (BullPower + BearPower)
+  - [x] Store results in Redis Hash (`analysis:large_orders:{instrument_id}`) with sentiment field
+  - [x] Expose via HTTP API with sentiment field
+  - [x] Frontend visualization with sentiment details
 - **Output**
   - [x] Map computations to Redis Hash fields under `analysis:support_resistance:{instrument_id}` and `analysis:large_orders:{instrument_id}`
   - [ ] Expose metrics for processing latency

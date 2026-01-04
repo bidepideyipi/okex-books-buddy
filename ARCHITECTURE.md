@@ -192,11 +192,12 @@ graph TB
 
 #### 4.2.8 Redis缓存模块
 
-- **职责**：提供高性能的数据缓存能力，存储实时分析结果
+- **职责**：提供高性能的数据缓存能力，存储实时分析结果和交易信号
 - **技术实现**：Redis 6.x
 - **核心功能**：
   - 缓存实时订单簿数据（最新400档）
   - 使用Hash结构存储分析结果，每个交易对对应一个Hash键
+  - 使用List结构存储交易信号事件，支持下游系统消费
   - 缓存告警规则配置
   - 存储实时监控指标的聚合数据
   - 支持数据过期策略配置
@@ -205,9 +206,25 @@ graph TB
 - **技术特性**：
   - 内存存储，亚毫秒级数据访问
   - Hash结构支持高效的字段级操作和查询
+  - List结构支持FIFO队列操作，适合交易信号发布
   - 高并发支持，适合实时数据场景
   - 内置数据持久化机制
   - 支持分布式部署，可扩展性强
+- **交易信号存储设计**：
+  - **Key名**：`trading_signals`
+  - **数据结构**：Redis List，存储JSON格式的交易信号事件
+  - **信号结构**：
+    ```json
+    {
+      "instrument_id": "BTC-USDT",
+      "signal_value": 0.85,
+      "direction": "bullish",
+      "trigger_time": "2023-10-15T14:30:45Z",
+      "signal_source": "large_order_sentiment"
+    }
+    ```
+  - **操作**：使用`LPUSH`添加新信号，使用`BRPOP`或`LPOP`消费信号
+  - **过期策略**：设置适当的过期时间（如24小时），避免List无限增长
 
 ## 5. 数据流与交互流程
 
@@ -412,6 +429,7 @@ graph TB
 2. **动态阈值确定**：计算90-95分位数（需要排序或统计）
 3. **距离加权计算**：指数衰减函数 $w(p) = e^{-\lambda \cdot \frac{|p - P_{\text{mid}}|}{P_{\text{mid}}}}$
 4. **多空力量对比**：加权求和计算
+5. **交易信号生成**：当Sentiment >= 0.3（强烈看涨）或 Sentiment <= -0.3（强烈看跌）时，生成交易信号事件
 
 **复杂度分析**：
 
@@ -1111,21 +1129,22 @@ run(df)
   - 每个交易对、每种分析类型使用独立的Hash Key，Key中显式包含 `instrument_id`，便于精确查询和按交易对维度监控。
   - Hash字段存放各分析结果明细，支撑/阻力位相关字段见下表。
 
-| 字段名              | 数据类型 | 描述                                       |
-| ------------------- | -------- | ------------------------------------------ |
-| instrument_id       | string   | 交易对ID（如BTC-USDT）                     |
-| analysis_time       | string   | 分析时间戳                                 |
-| support_level_1     | string   | 一级支撑位                                 |
-| support_level_2     | string   | 二级支撑位                                 |
-| resistance_level_1  | string   | 一级阻力位                                 |
-| resistance_level_2  | string   | 二级阻力位                                 |
-| large_buy_orders    | string   | 大额买单总量                               |
-| large_sell_orders   | string   | 大额卖单总量                               |
-| large_order_trend   | string   | 大额订单趋势（bullish/bearish/neutral）    |
-| depth_anomaly_score | string   | 深度异常分数                               |
-| depth_anomaly_alert | string   | 深度异常告警状态（normal/warning/alert）   |
-| liquidity_index     | string   | 流动性指数                                 |
-| liquidity_alert     | string   | 流动性萎缩告警状态（normal/warning/alert） |
+| 字段名              | 数据类型 | 描述                                                                 |
+| ------------------- | -------- | -------------------------------------------------------------------- |
+| instrument_id       | string   | 交易对ID（如BTC-USDT）                                               |
+| analysis_time       | string   | 分析时间戳                                                           |
+| support_level_1     | string   | 一级支撑位                                                           |
+| support_level_2     | string   | 二级支撑位                                                           |
+| resistance_level_1  | string   | 一级阻力位                                                           |
+| resistance_level_2  | string   | 二级阻力位                                                           |
+| large_buy_orders    | string   | 加权大额买单总金额（BullPower，用于判断主力买盘力量）                |
+| large_sell_orders   | string   | 加权大额卖单总金额（BearPower，用于判断主力卖盘力量）                |
+| sentiment           | string   | 主力多空倾向指标，范围[-1,1]：>0.3偏多，<-0.3偏空，[-0.3,0.3]中性   |
+| large_order_trend   | string   | 大额订单趋势（bullish/bearish/neutral），基于sentiment值判定         |
+| depth_anomaly_score | string   | 深度异常分数                                                         |
+| depth_anomaly_alert | string   | 深度异常告警状态（normal/warning/alert）                             |
+| liquidity_index     | string   | 流动性指数                                                           |
+| liquidity_alert     | string   | 流动性萎缩告警状态（normal/warning/alert）                           |
 
 ### 14.3 交易对订阅配置Set（key: config:trading_pairs）
 
@@ -1320,6 +1339,17 @@ SCARD config:trading_pairs
 | support_resistance | object | 否 | 支撑位/阻力位数据 |
 | large_orders | object | 否 | 大额订单数据 |
 
+**large_orders 对象结构**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| instrument_id | string | 是 | 交易对标识 |
+| analysis_time | string | 是 | 分析时间戳（Unix timestamp） |
+| large_buy_orders | string | 是 | 加权大额买单总金额（BullPower） |
+| large_sell_orders | string | 是 | 加权大额卖单总金额（BearPower） |
+| sentiment | string | 是 | 主力多空倾向指标，范围[-1,1] |
+| large_order_trend | string | 是 | 大额订单趋势（bullish/bearish/neutral） |
+
 **响应示例**：
 
 ```json
@@ -1341,7 +1371,8 @@ SCARD config:trading_pairs
       "analysis_time": "1735689600",
       "large_buy_orders": "1250000.00",
       "large_sell_orders": "980000.00",
-      "large_order_trend": "bullish"
+      "sentiment": "0.12",
+      "large_order_trend": "neutral"
     }
   }
 }
