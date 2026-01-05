@@ -337,7 +337,7 @@ graph TB
 **历史数据需求**：
 - 不需要时间序列历史数据
 - 仅需要当前订单簿的完整数据
-- 需要实现短期滑动窗口（5秒内）用于平滑Sentiment指标
+- 需要实现短期滑动窗口（30秒内）用于平滑Sentiment指标
 - 计算完成后直接写入Redis Hash结构 key: `analysis:sentiment:{inst_id}`
 ```json
 {

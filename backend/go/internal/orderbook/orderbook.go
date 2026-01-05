@@ -9,58 +9,20 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
-
-// OrderBook represents the order book for a trading pair
-type OrderBook struct {
-	InstrumentID string
-	Timestamp    int64
-	Asks         []PriceLevel // sorted ascending by price
-	Bids         []PriceLevel // sorted descending by price
-	Checksum     int32
-}
-
-// PriceLevel represents a single price level with price and size
-type PriceLevel struct {
-	Price      string
-	Size       string
-	OrderCount int
-}
-
-// OKExMessage represents the WebSocket message from OKEx
-type OKExMessage struct {
-	Event  string          `json:"event"`
-	Arg    json.RawMessage `json:"arg"`
-	Data   []BookData      `json:"data"`
-	Code   string          `json:"code"`
-	Msg    string          `json:"msg"`
-	Action string          `json:"action"`
-}
-
-// ArgData represents the arg field structure
-type ArgData struct {
-	Channel string `json:"channel"`
-	InstID  string `json:"instId"`
-}
-
-// BookData represents the order book data
-type BookData struct {
-	Asks      [][]string `json:"asks"`
-	Bids      [][]string `json:"bids"`
-	Timestamp string     `json:"ts"`
-	Checksum  int32      `json:"checksum"`
-	InstID    string     `json:"instId"`
-}
 
 // Manager manages order books for multiple instruments
 type Manager struct {
-	books map[string]*OrderBook // instrument_id -> order book
+	books        map[string]*OrderBook               // instrument_id -> order book
+	sentimentMap map[string][]PriceLevelWithTimeItem // instrument_id -> sliding window of sentiment values
 }
 
 // NewManager creates a new order book manager
 func NewManager() *Manager {
 	return &Manager{
-		books: make(map[string]*OrderBook),
+		books:        make(map[string]*OrderBook),
+		sentimentMap: make(map[string][]PriceLevelWithTimeItem),
 	}
 }
 
@@ -547,6 +509,7 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 //   - determine dynamic threshold by percentile
 //   - apply distance-based exponential decay weighting
 //   - aggregate weighted notional for bids (BullPower) and asks (BearPower)
+//   - apply sliding window smoothing to sentiment values
 func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha float64, decayLambda float64, sentimentDeadzoneThreshold float64) (largeBuyNotional, largeSellNotional, sentiment float64, err error) {
 	asks, bids, err := m.GetTop400(instID)
 	if err != nil {
@@ -671,30 +634,32 @@ func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha f
 		transformedSentiment = baseSentiment*0.3 + (remainingSentiment/(1-sentimentDeadzoneThreshold))*0.7
 	}
 
-	//sentiment = transformedSentiment
+	// Apply sliding window smoothing to sentiment values (30-second window)
+	currentTime := time.Now().Unix()
+	windowDuration := int64(30) // 30 seconds
 
-	// // Add colored logging based on sentiment value
-	// colorReset := "\033[0m"
-	// colorGreen := "\033[32m"
-	// colorRed := "\033[31m"
-	// colorYellow := "\033[33m"
+	// Add current sentiment to the sliding window
+	m.sentimentMap[instID] = append(m.sentimentMap[instID], PriceLevelWithTimeItem{Value: transformedSentiment, Timestamp: currentTime})
 
-	// var color string
-	// if sentiment >= sentimentDeadzoneThreshold {
-	// 	color = colorGreen
-	// } else if sentiment <= -sentimentDeadzoneThreshold {
-	// 	color = colorRed
-	// } else {
-	// 	color = colorYellow
-	// }
+	// Remove old entries outside the 30-second window
+	newWindow := []PriceLevelWithTimeItem{}
+	for _, entry := range m.sentimentMap[instID] {
+		if currentTime-entry.Timestamp <= windowDuration {
+			newWindow = append(newWindow, entry)
+		}
+	}
+	m.sentimentMap[instID] = newWindow
 
-	// log.Printf("%s%s - Sentiment: %.4f | Large Buy: %.2f | Large Sell: %.2f%s",
-	// 	color,
-	// 	instID,
-	// 	sentiment,
-	// 	largeBuyNotional,
-	// 	largeSellNotional,
-	// 	colorReset)
+	// Calculate smoothed sentiment as average of values in the window
+	if len(m.sentimentMap[instID]) > 0 {
+		var sum float64
+		for _, entry := range m.sentimentMap[instID] {
+			sum += entry.Value
+		}
+		sentiment = sum / float64(len(m.sentimentMap[instID]))
+	} else {
+		sentiment = transformedSentiment
+	}
 
-	return largeBuyNotional, largeSellNotional, transformedSentiment, nil
+	return largeBuyNotional, largeSellNotional, sentiment, nil
 }

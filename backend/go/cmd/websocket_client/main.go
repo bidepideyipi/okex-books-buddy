@@ -91,64 +91,63 @@ func main() {
 					log.Printf("Failed to store support/resistance for %s: %v", instID, err)
 				}
 
-				// Compute large order distribution and sentiment and store in Redis
 				/*
-					## 参数详解
-					### 1. percentileAlpha (0.95)
-					- 含义 ：大订单阈值百分位。计算所有订单名义价值（price×size）的第95百分位数，高于此值的订单被视为"大订单"。
-					- 作用 ：动态适应不同市场的流动性状况，自动调整大订单的判断标准。
-					- 影响 ：
-					- 值越大，大订单的定义越严格（只有极少数最大订单被识别）
-					- 值越小，会识别更多相对较小的订单为"大订单"
-					- 默认值 ：0.95（与当前设置一致）
-					### 2. decayLambda (7.0)
-					- 含义 ：距离衰减系数。用于计算订单权重的指数衰减参数，订单距离中间价越远，权重越低。
-					- 计算公式 ： weight = exp(-decayLambda × |price - mid| / mid)
-					- 作用 ：给更接近当前价格的大订单赋予更高权重，反映短期市场意图。
-					- 影响 ：
-					- 值越大，距离对权重的影响越显著（远价订单权重快速衰减）
-					- 值越小，距离的影响越弱（远近订单权重差异较小）
-					- 默认值 ：5.0（当前设置7.0比默认值更强调近价订单）
-					### 3. sentimentThreshold (0.3)
-					- 含义 ：情绪强度阈值。用于解释最终情绪指标的参考值（实际计算中仅作为默认值，函数内部不直接使用此阈值进行判断）。
-					- 作用 ：提供情绪指标的解读标准，如绝对值超过0.3表示较强的多空倾向。
-					- 默认值 ：0.3（与当前设置一致）
-					## 与默认值对比分析
-					当前参数设置与默认值的主要差异在于：
+					Compute large order distribution with deadzone threshold
+					Parameters: instID, percentileAlpha(0.95), decayLambda(7.0), sentimentDeadzoneThreshold(0.3)
+						## 参数详解
+						### 1. percentileAlpha (0.95)
+						- 含义 ：大订单阈值百分位。计算所有订单名义价值（price×size）的第95百分位数，高于此值的订单被视为"大订单"。
+						- 作用 ：动态适应不同市场的流动性状况，自动调整大订单的判断标准。
+						- 影响 ：
+						- 值越大，大订单的定义越严格（只有极少数最大订单被识别）
+						- 值越小，会识别更多相对较小的订单为"大订单"
+						- 默认值 ：0.95（与当前设置一致）
+						### 2. decayLambda (7.0)
+						- 含义 ：距离衰减系数。用于计算订单权重的指数衰减参数，订单距离中间价越远，权重越低。
+						- 计算公式 ： weight = exp(-decayLambda × |price - mid| / mid)
+						- 作用 ：给更接近当前价格的大订单赋予更高权重，反映短期市场意图。
+						- 影响 ：
+						- 值越大，距离对权重的影响越显著（远价订单权重快速衰减）
+						- 值越小，距离的影响越弱（远近订单权重差异较小）
+						- 默认值 ：5.0（当前设置7.0比默认值更强调近价订单）
+						### 3. sentimentThreshold (0.3)
+						- 含义 ：情绪强度阈值。用于解释最终情绪指标的参考值（实际计算中仅作为默认值，函数内部不直接使用此阈值进行判断）。
+						- 作用 ：提供情绪指标的解读标准，如绝对值超过0.3表示较强的多空倾向。
+						- 默认值 ：0.3（与当前设置一致）
+						## 与默认值对比分析
+						当前参数设置与默认值的主要差异在于：
 
-					- decayLambda从5.0提高到7.0 ：增强了对近价大订单的关注度，过滤掉更多远价大订单的影响，更聚焦于短期市场动力。
-					- 其他参数保持默认值，兼顾了大订单识别的严格性和情绪解读的标准性。
-					### 1. 日内短线交易（Scalping）
-					- percentileAlpha = 0.98 ：识别极少数真正的超大订单
-					- decayLambda = 3.0 ：适当关注稍远价格的大订单，捕捉潜在突破
-					- sentimentDeadzoneThreshold = 0.4 ：提高情绪中性死区阈值，只关注强烈信号
-					### 2. 趋势跟踪（Trend Following）
-					- percentileAlpha = 0.95 ：标准设置，平衡敏感度和准确性
-					- decayLambda = 5.0 ：默认值，综合考虑不同价格的大订单
-					- sentimentDeadzoneThreshold = 0.3 ：标准中性死区阈值，适应趋势交易的信号需求
-					### 3. 做市策略（Market Making）
-					- percentileAlpha = 0.90 ：识别更多相对较大的订单，提前感知流动性变化
-					- decayLambda = 8.0 ：强烈关注近价订单，保护做市头寸
-					- sentimentDeadzoneThreshold = 0.2 ：降低中性死区阈值，捕捉微弱信号
-					### 4. 高波动市场
-					- 降低 decayLambda 至3.0-4.0，扩大关注范围
-					- 提高 percentileAlpha 至0.97-0.99，避免噪音干扰
-					### 5. 低波动市场
-					- 提高 decayLambda 至6.0-8.0，聚焦核心价格区域
-					- 降低 percentileAlpha 至0.92-0.94，提高信号敏感度
-					函数返回三个值：
-					1. largeBuyNotional ：加权后的大买单总名义价值（bullPower）
-					2. largeSellNotional ：加权后的大卖单总名义价值（bearPower）
-					3. sentiment ：标准化情绪指标，计算公式： (bullPower - bearPower) / (bullPower + bearPower)
-					### 情绪指标解读
-					- sentiment > 0.3 ：强烈看涨信号
-					- 0.1 < sentiment ≤ 0.3 ：温和看涨信号
-					- -0.1 ≤ sentiment ≤ 0.1 ：中性市场
-					- -0.3 ≤ sentiment < -0.1 ：温和看跌信号
-					- sentiment < -0.3 ：强烈看跌信号
+						- decayLambda从5.0提高到7.0 ：增强了对近价大订单的关注度，过滤掉更多远价大订单的影响，更聚焦于短期市场动力。
+						- 其他参数保持默认值，兼顾了大订单识别的严格性和情绪解读的标准性。
+						### 1. 日内短线交易（Scalping）
+						- percentileAlpha = 0.98 ：识别极少数真正的超大订单
+						- decayLambda = 3.0 ：适当关注稍远价格的大订单，捕捉潜在突破
+						- sentimentDeadzoneThreshold = 0.4 ：提高情绪中性死区阈值，只关注强烈信号
+						### 2. 趋势跟踪（Trend Following）
+						- percentileAlpha = 0.95 ：标准设置，平衡敏感度和准确性
+						- decayLambda = 5.0 ：默认值，综合考虑不同价格的大订单
+						- sentimentDeadzoneThreshold = 0.3 ：标准中性死区阈值，适应趋势交易的信号需求
+						### 3. 做市策略（Market Making）
+						- percentileAlpha = 0.90 ：识别更多相对较大的订单，提前感知流动性变化
+						- decayLambda = 8.0 ：强烈关注近价订单，保护做市头寸
+						- sentimentDeadzoneThreshold = 0.2 ：降低中性死区阈值，捕捉微弱信号
+						### 4. 高波动市场
+						- 降低 decayLambda 至3.0-4.0，扩大关注范围
+						- 提高 percentileAlpha 至0.97-0.99，避免噪音干扰
+						### 5. 低波动市场
+						- 提高 decayLambda 至6.0-8.0，聚焦核心价格区域
+						- 降低 percentileAlpha 至0.92-0.94，提高信号敏感度
+						函数返回三个值：
+						1. largeBuyNotional ：加权后的大买单总名义价值（bullPower）
+						2. largeSellNotional ：加权后的大卖单总名义价值（bearPower）
+						3. sentiment ：标准化情绪指标，计算公式： (bullPower - bearPower) / (bullPower + bearPower)
+						### 情绪指标解读
+						- sentiment > 0.3 ：强烈看涨信号
+						- 0.1 < sentiment ≤ 0.3 ：温和看涨信号
+						- -0.1 ≤ sentiment ≤ 0.1 ：中性市场
+						- -0.3 ≤ sentiment < -0.1 ：温和看跌信号
+						- sentiment < -0.3 ：强烈看跌信号
 				*/
-				// Compute large order distribution with deadzone threshold
-				// Parameters: instID, percentileAlpha(0.95), decayLambda(7.0), sentimentDeadzoneThreshold(0.3)
 				largeBuy, largeSell, sentiment, err := obManager.ComputeLargeOrderDistribution(instID, 0.97, 3.0, 0.3)
 				if err != nil {
 					log.Printf("Failed to compute large order distribution for %s: %v", instID, err)
