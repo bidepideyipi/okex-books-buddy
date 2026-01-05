@@ -37,7 +37,7 @@ func main() {
 		// Process message and update order book
 		if err := obManager.ProcessMessage(msg); err != nil {
 			return fmt.Errorf("failed to process message: %w", err)
-		} 
+		}
 
 		return nil
 	}
@@ -166,15 +166,17 @@ func main() {
 					}
 
 					log.Printf("%sLargeBuy: %.2f, LargeSell: %.2f, Sentiment: %.4f for %s%s", colorCode, largeBuy, largeSell, sentiment, instID, config.Reset)
-
-					//TODO 这是一个瞬时的指标，定义一个Key 2秒超时存储到Redis中
-					// Publish to Redis List for Bytewax processing
-					// if err := redisClient.PublishOrderBookEvent(config.PublishOrderBookEventKey, string(msg)); err != nil {
-					// 	log.Printf("Failed to publish to Redis: %v", err)
-					// }
 				}
 
-				if err := redisClient.StoreLargeOrderDistribution(instID, largeBuy, largeSell, sentiment); err != nil {
+				hashKey := fmt.Sprintf(config.SentimentKey, instID)
+
+				fields := map[string]interface{}{
+					"instrument_id": instID,
+					"analysis_time": time.Now().Unix(),
+					"sentiment":     sentiment,
+				}
+
+				if err := redisClient.HashSave(hashKey, fields); err != nil {
 					log.Printf("Failed to store large order distribution for %s: %v", instID, err)
 				}
 			}

@@ -19,9 +19,9 @@ const (
 
 // RedisKey
 const (
-	TradingPairsKey           = "config:trading_pairs"  //运行时会去订阅的交易对
-	PublishOrderBookEventKey  = "list:orderbook:events" //订单薄事件
-	PublishTradeSigleEventKey = "list:sigle:events"     //信号事件
+	TradingPairsKey      = "config:trading_pairs" //运行时会去订阅的交易对
+	SupportResistanceKey = "analysis:supp_resi:%s"//支撑位和阻力位
+	SentimentKey         = "analysis:sentiment:%s"//多空情绪
 )
 
 // RedisConfig holds Redis connection settings.

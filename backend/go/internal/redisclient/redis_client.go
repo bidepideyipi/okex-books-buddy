@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/supermancell/okex-buddy/internal/config"
 )
 
 // Client wraps Redis operations for the system
@@ -89,9 +90,17 @@ func (c *Client) StoreOrderBookSnapshot(instID string, asks, bids interface{}, c
 	return nil
 }
 
+func (c *Client) HashSave(hashKey string, fields map[string]interface{}) error {
+	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to store hash fields: %w", err)
+	}
+	return nil
+
+}
+
 // StoreSupportResistance stores support and resistance levels for an instrument in Redis Hash
 func (c *Client) StoreSupportResistance(instID string, supports, resistances []float64) error {
-	hashKey := fmt.Sprintf("analysis:support_resistance:%s", instID)
+	hashKey := fmt.Sprintf(config.SupportResistanceKey, instID)
 
 	fields := map[string]interface{}{
 		"instrument_id": instID,
@@ -99,47 +108,20 @@ func (c *Client) StoreSupportResistance(instID string, supports, resistances []f
 	}
 
 	if len(supports) > 0 {
-		fields["support_level_1"] = supports[0]
+		fields["support_high"] = supports[0]
 	}
 	if len(supports) > 1 {
-		fields["support_level_2"] = supports[1]
+		fields["support_low"] = supports[1]
 	}
 	if len(resistances) > 0 {
-		fields["resistance_level_1"] = resistances[0]
+		fields["resistance_high"] = resistances[0]
 	}
 	if len(resistances) > 1 {
-		fields["resistance_level_2"] = resistances[1]
+		fields["resistance_low"] = resistances[1]
 	}
 
 	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
 		return fmt.Errorf("failed to store support/resistance levels: %w", err)
-	}
-
-	return nil
-}
-
-// StoreLargeOrderDistribution stores large order distribution metrics in Redis Hash
-func (c *Client) StoreLargeOrderDistribution(instID string, largeBuyNotional, largeSellNotional, sentiment float64) error {
-	hashKey := fmt.Sprintf("analysis:large_orders:%s", instID)
-
-	trend := "neutral"
-	if sentiment > 0.3 {
-		trend = "bullish"
-	} else if sentiment < -0.3 {
-		trend = "bearish"
-	}
-
-	fields := map[string]interface{}{
-		"instrument_id":     instID,
-		"analysis_time":     time.Now().Unix(),
-		"large_buy_orders":  largeBuyNotional,
-		"large_sell_orders": largeSellNotional,
-		"sentiment":         sentiment,
-		"large_order_trend": trend,
-	}
-
-	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
-		return fmt.Errorf("failed to store large order distribution: %w", err)
 	}
 
 	return nil

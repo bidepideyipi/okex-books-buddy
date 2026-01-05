@@ -104,8 +104,8 @@ func main() {
 		}
 		instID := path
 
-		supportKey := fmt.Sprintf("analysis:support_resistance:%s", instID)
-		largeKey := fmt.Sprintf("analysis:large_orders:%s", instID)
+		supportKey := fmt.Sprintf(config.SupportResistanceKey, instID)
+		largeKey := fmt.Sprintf("analysis:sentiment:%s", instID)
 
 		supportHash, err := redisClient.GetHash(supportKey)
 		if err != nil {

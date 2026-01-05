@@ -316,8 +316,7 @@ graph TB
 - 利用sync.Pool复用临时对象，减少GC压力
 - 将结果直接写入Redis Hash，无需中间缓冲
 
-### 6.3 大额订单分布分析
-
+### 6.3 大额订单分布分析推算多空情绪
 #### 6.3.1 需求特点
 
 根据PRD算法详解，该功能包含以下计算步骤：
@@ -345,6 +344,7 @@ graph TB
   "sentiment": 0.25
 }
 ```
+sentiment表示当前交易对的多空力量对比指标，值范围[-1, 1]，大于0.3表示强烈看涨，小于-0.3表示强烈看跌。
 
 #### 6.3.2 推荐处理方式
 
@@ -671,10 +671,6 @@ graph TB
 - 通过负载均衡实现请求分发
 - 支持自动扩缩容
 
-
-
-
-
 #### 8.1.6 Redis集群扩展
 
 - 节点扩展：通过增加主节点实现数据分片扩展
@@ -947,31 +943,11 @@ run(df)
 
 - **Key 设计约定**：
   - 通用格式：`analysis:{analysis_type}:{instrument_id}`
-  - 支撑位与阻力位结果：`analysis:support_resistance:{instrument_id}`（例如 `analysis:support_resistance:BTC-USDT`）
+  - 支撑位与阻力位结果：`analysis:supp_resi:{instrument_id}`（例如 `analysis:support_resistance:BTC-USDT`）
   - 其他分析类型示例：
-    - 大额订单分布：`analysis:large_orders:{instrument_id}`
-    - 深度异常波动：`analysis:depth_anomaly:{instrument_id}`
-    - 流动性萎缩：`analysis:liquidity_shrink:{instrument_id}`
-- **说明**：
-  - 每个交易对、每种分析类型使用独立的Hash Key，Key中显式包含 `instrument_id`，便于精确查询和按交易对维度监控。
-  - Hash字段存放各分析结果明细，支撑/阻力位相关字段见下表。
-
-| 字段名              | 数据类型 | 描述                                                                 |
-| ------------------- | -------- | -------------------------------------------------------------------- |
-| instrument_id       | string   | 交易对ID（如BTC-USDT）                                               |
-| analysis_time       | string   | 分析时间戳                                                           |
-| support_level_1     | string   | 一级支撑位                                                           |
-| support_level_2     | string   | 二级支撑位                                                           |
-| resistance_level_1  | string   | 一级阻力位                                                           |
-| resistance_level_2  | string   | 二级阻力位                                                           |
-| large_buy_orders    | string   | 加权大额买单总金额（BullPower，用于判断主力买盘力量）                |
-| large_sell_orders   | string   | 加权大额卖单总金额（BearPower，用于判断主力卖盘力量）                |
-| sentiment           | string   | 主力多空倾向指标，范围[-1,1]：>0.3偏多，<-0.3偏空，[-0.3,0.3]中性   |
-| large_order_trend   | string   | 大额订单趋势（bullish/bearish/neutral），基于sentiment值判定         |
-| depth_anomaly_score | string   | 深度异常分数                                                         |
-| depth_anomaly_alert | string   | 深度异常告警状态（normal/warning/alert）                             |
-| liquidity_index     | string   | 流动性指数                                                           |
-| liquidity_alert     | string   | 流动性萎缩告警状态（normal/warning/alert）                           |
+    - 大额订单分布推算多空情绪：`analysis:sentiment:{instrument_id}`
+    - 深度异常波动：`analysis:dept_anom:{instrument_id}`
+    - 流动性萎缩：`analysis:liqu_shri:{instrument_id}`
 
 ### 14.3 交易对订阅配置Set（key: config:trading_pairs）
 
@@ -1002,8 +978,6 @@ SMEMBERS config:trading_pairs
 # 获取交易对数量
 SCARD config:trading_pairs
 ```
-
-
 ## 16. 风险与应对
 
 ### 16.1 技术风险

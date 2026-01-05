@@ -536,7 +536,7 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 		resistances = append(resistances, binCenter(askPeaks[i].Index))
 	}
 
-	log.Printf("Computed support and resistance levels for %s: supports=%v, resistances=%v", instID, supports, resistances)
+	//log.Printf("Computed support and resistance levels for %s: supports=%v, resistances=%v", instID, supports, resistances)
 	return supports, resistances, nil
 }
 
