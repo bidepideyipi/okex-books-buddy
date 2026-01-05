@@ -1003,17 +1003,6 @@ SMEMBERS config:trading_pairs
 SCARD config:trading_pairs
 ```
 
-### 14.4 系统监控Hash（key: system:monitoring）
-
-| 字段名                 | 数据类型 | 描述                 |
-| ---------------------- | -------- | -------------------- |
-| websocket_connections  | string   | 当前WebSocket连接数  |
-| active_pairs           | string   | 活跃交易对数量       |
-| avg_processing_latency | string   | 平均处理延迟（毫秒） |
-| redis_memory_usage     | string   | Redis内存使用情况    |
-
-
-
 
 ## 16. 风险与应对
 
@@ -1165,13 +1154,6 @@ redis-cli SADD config:trading_pairs BTC-USDT ETH-USDT MATIC-USDT
 | OKEx WebSocket断连    | 触发自动重连机制，重连后重新订阅当前配置的交易对     |
 
 ### 17.6 监控指标
-
-系统会在 `system:monitoring` Hash中更新以下指标：
-
-- `active_pairs`：当前活跃订阅的交易对数量
-- `websocket_connections`：当前WebSocket连接数
-- `last_config_check`：最后一次配置检查时间
-- `subscription_changes`：订阅变更次数（累计）
 
 ### 17.7 配置文件示例
 

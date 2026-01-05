@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Quick start script for OKEx Buddy development environment
-# This script starts all necessary services for testing the Vue dashboard MVP
+# This script starts all necessary services for the OKEx analysis system
 
 set -e
 
@@ -35,7 +35,6 @@ echo "✅ Configured pairs: BTC-USDT-SWAP, ETH-USDT-SWAP, SOL-USDT-SWAP"
 echo ""
 echo "3️⃣  Loading environment configuration..."
 export $(grep -v '^#' config/app.dev.env | xargs)
-export $(grep -v '^#' config/influxdb.dev.env | xargs)
 echo "✅ Environment loaded"
 
 # 4. Start WebSocket Client in background
@@ -65,23 +64,10 @@ echo "   API: http://localhost:8080"
 # Wait for API to be ready
 sleep 2
 
-# 6. Start Vue Dashboard
-echo ""
-echo "6️⃣  Starting Vue dashboard..."
-cd frontend/monitoring
-
-if [ ! -d "node_modules" ]; then
-    echo "📦 Installing dependencies..."
-    npm install
-fi
-
-echo "✅ Starting development server..."
-echo ""
 echo "================================================"
 echo "🎉 All services started successfully!"
 echo "================================================"
 echo ""
-echo "📊 Dashboard:      http://localhost:5173"
 echo "🔌 API Server:     http://localhost:8080"
 echo "📝 WebSocket Logs: tail -f /tmp/okex-websocket.log"
 echo "📝 API Logs:       tail -f /tmp/okex-api.log"
@@ -89,11 +75,12 @@ echo ""
 echo "To stop all services:"
 echo "  kill $WS_PID $API_PID"
 echo ""
-echo "Press Ctrl+C to stop the Vue dev server"
+echo "Press Ctrl+C to stop"
 echo "================================================"
 echo ""
 
-npm run dev
+# Wait for processes to complete
+wait $WS_PID $API_PID
 
 # Cleanup on exit
 trap "kill $WS_PID $API_PID 2>/dev/null" EXIT

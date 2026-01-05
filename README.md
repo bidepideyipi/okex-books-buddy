@@ -7,7 +7,7 @@
 - Go 1.20+
 - Redis 6.x (running on localhost:6379)
 - Python 3.9+ (for Bytewax, later milestones)
-- Node.js 16+ (for Vue frontend, later milestones)
+
 
 ### M2 - WebSocket Client Setup
 
@@ -51,7 +51,6 @@ The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
    
    # Load environment variables
    export $(grep -v '^#' config/app.dev.env | xargs)
-   export $(grep -v '^#' config/influxdb.dev.env | xargs)
    
    # Run WebSocket client
    cd backend/go
@@ -94,8 +93,7 @@ The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
    # Check order book snapshot for a specific pair
    redis-cli HGETALL orderbook:BTC-USDT-SWAP
    
-   # Check system monitoring
-   redis-cli HGETALL system:monitoring
+
    
    # View event stream
    redis-cli LRANGE list:orderbook:events 0 10
@@ -117,9 +115,7 @@ For reference, the original M1 setup instructions: (dev)
 #### 1. Prerequisites
 - **Golang**: 1.20+
 - **Python**: 3.9+ (for Bytewax / analysis flow)
-- **Node.js**: 16+ (for Vue frontend)
 - **Redis**: 6.x (running locally, e.g. `localhost:6379`)
-- **InfluxDB**: 2.x (already running on `http://localhost:8086` per your setup)
 
 #### 2. Environment configuration
 
@@ -131,8 +127,7 @@ cd /Users/anthony/Documents/github/okex-buddy
 # App-level dev config (Redis, OKEx WS, API bind, etc.)
 export $(grep -v '^#' config/app.dev.env | xargs)
 
-# InfluxDB dev config (only if you need Influx in the running service)
-export $(grep -v '^#' config/influxdb.dev.env | xargs)
+
 ```
 
 > Keep real secrets (passwords, tokens) in local `.env` or your shell, do not commit them.
@@ -161,7 +156,6 @@ Current skeleton (before wiring Bytewax `Dataflow`) can be run with:
 
 ```bash
 cd /Users/anthony/Documents/github/okex-buddy
-export $(grep -v '^#' config/influxdb.dev.env | xargs)
 python analysis/bytewax/analysis_flow.py
 ```
 
@@ -172,29 +166,9 @@ cd /Users/anthony/Documents/github/okex-buddy/analysis/bytewax
 bytewax run analysis_flow.py
 ```
 
-#### 5. Start frontend (Vue monitoring app)
 
-The Vue 3 dashboard is now fully implemented with real-time analysis visualization:
 
-```bash
-cd /Users/anthony/Documents/github/okex-buddy/frontend/monitoring
-npm install
-npm run dev
-```
-
-The dashboard will be available at `http://localhost:5173` and automatically proxy API requests to the Go API server at `localhost:8080`.
-
-**Features:**
-- Real-time support/resistance level display
-- Large order distribution analysis with sentiment indicators
-- Interactive ECharts pie chart visualization
-- Auto-refresh every 2 seconds
-- Responsive design with Element Plus UI
-
-See [frontend/monitoring/README.md](frontend/monitoring/README.md) for detailed documentation.
-
-#### 6. Process overview in dev
-- **Go WebSocket client**: connects to OKEx WS, processes order book data, writes into Redis / InfluxDB.
-- **Python / Bytewax analysis**: consumes buffered data (via Redis List), computes deeper analytics, writes results to Redis / InfluxDB.
-- **Go API server**: exposes REST/WS endpoints for current state and historical data.
-- **Vue monitoring app**: connects to the API/WS endpoints to visualize metrics, order book, and alerts.
+#### 5. Process overview in dev
+- **Go WebSocket client**: connects to OKEx WS, processes order book data, writes into Redis.
+- **Python / Bytewax analysis**: consumes buffered data (via Redis List), computes deeper analytics, writes results to Redis.
+- **Go API server**: exposes REST endpoints for current state and metrics.

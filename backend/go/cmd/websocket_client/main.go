@@ -37,12 +37,7 @@ func main() {
 		// Process message and update order book
 		if err := obManager.ProcessMessage(msg); err != nil {
 			return fmt.Errorf("failed to process message: %w", err)
-		}
-
-		// Publish to Redis List for Bytewax processing
-		if err := redisClient.PublishOrderBookEvent(config.PublishOrderBookEventKey, string(msg)); err != nil {
-			log.Printf("Failed to publish to Redis: %v", err)
-		}
+		} 
 
 		return nil
 	}
