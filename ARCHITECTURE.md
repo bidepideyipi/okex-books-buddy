@@ -38,22 +38,16 @@
 - **开发语言**：Golang、Python、JavaScript
 - **Websocket客户端**：Gorilla Websocket
 - **流处理引擎**：Bytewax
-- **时序数据库**：InfluxDB
+
 - **缓存数据库**：Redis
-- **前端框架**：Vue.js 3.x
-- **图表库**：ECharts 或 Chart.js
-- **UI组件库**：Element Plus
 
 ### 3.2 技术选型理由
 
 - **Golang**：高性能、高并发特性适合实时数据处理场景
 - **Gorilla Websocket**：成熟稳定的Websocket客户端库，适合与OKEx API对接
 - **Bytewax**：基于Python的流处理框架，适合复杂的实时数据分析任务
-- **InfluxDB**：专门针对时序数据优化的数据库，高写入吞吐量，适合实时数据存储和查询
+
 - **Redis**：高性能内存数据库，支持多种数据结构，适合作为缓存层和消息缓冲
-- **Vue.js 3.x**：现代化前端框架，响应式设计适合实时数据展示，生态成熟，开发效率高
-- **ECharts/Chart.js**：强大的图表库，支持实时数据可视化，适合WebSocket指标监控场景
-- **Element Plus**：基于Vue 3的UI组件库，提供丰富的组件，加速前端界面开发
 
 ## 4. 系统架构设计
 
@@ -63,13 +57,6 @@
 
 ```mermaid
 graph TB
-    subgraph frontend["前端监控层"]
-        A1["Vue监控应用"]
-        A2["实时指标可视化"]
-        A3["WebSocket状态监控"]
-        A4["告警展示模块"]
-    end
-  
     subgraph analysis["实时分析层"]
         B1["支撑位与阻力位计算"]
         B2["大额订单分布分析"]
@@ -79,15 +66,12 @@ graph TB
   
     subgraph processing["数据获取与预处理层"]
         C1["WebSocket客户端"]
-        C2["数据解析模块"]
-        C3["数据验证模块"]
-        C4["数据缓冲模块"]
+        C2["数据解析与验证模块"]
+        C3["数据缓冲模块"]
     end
   
     subgraph storage["数据存储与缓存层"]
         D1["Redis缓存"]
-        D2["InfluxDB存储"]
-        D3["数据持久化"]
     end
   
     subgraph external["外部数据源层"]
@@ -97,17 +81,14 @@ graph TB
     E1 --> C1
     C1 --> C2
     C2 --> C3
-    C3 --> C4
-    C4 --> D1
-    C4 --> D2
-    D1 --> B1
-    D1 --> B2
-    D2 --> B3
-    D2 --> B4
-    B1 --> A1
-    B2 --> A2
-    B3 --> A3
-    B4 --> A4
+    C3 --> B1
+    C3 --> B2
+    C3 --> B3
+    C3 --> B4
+    B1 --> D1
+    B2 --> D1
+    B3 --> D1
+    B4 --> D1
 ```
 
 ### 4.2 核心组件详细设计
@@ -150,59 +131,15 @@ graph TB
   - 深度异常波动警告
   - 流动性萎缩预警
 
-#### 4.2.6 Vue监控模块
-
-- **职责**：提供 WebSocket 连接状态的可视化监控界面
-- **技术实现**：Vue.js 3.x + Element Plus + ECharts
-- **核心功能**：
-  - **WebSocket 连接状态监控**
-    - 显示当前连接状态（已连接/未连接/重连中）
-    - 显示连接的 WebSocket URL
-    - 显示连接建立时间
-    - 显示最后一次消息接收时间
-    - 显示重连次数统计
-  - **实时分析结果展示**
-    - 支撑位/阻力位可视化
-    - 大额订单分布图表
-- **数据来源**：
-  - WebSocket 连接状态：通过后端 API 获取
-  - 实时分析结果：通过 WebSocket 推送或 HTTP API 轮询
-- **技术特性**：
-  - 响应式设计，支持多设备访问
-  - 实时数据更新
-  - 连接状态自动刷新（每 5 秒）
-
-#### 4.2.7 InfluxDB存储模块
-
-- **职责**：提供高效的时序数据存储和查询能力
-- **技术实现**：InfluxDB 2.x
-- **核心功能**：
-  - 存储WebSocket连接指标（连接数、延迟、吞吐量）
-  - 存储订单簿实时数据（价格、数量、深度）
-  - 存储实时分析结果（支撑位/阻力位、大额订单分布）
-  - 存储告警历史记录
-  - 支持时序数据的高效查询和聚合分析
-  - 支持数据保留策略配置
-- **技术特性**：
-  - 专门针对时间序列数据优化的存储引擎
-  - 高写入吞吐量，适合实时数据场景
-  - 强大的查询语言（Flux）支持复杂分析
-  - 内置数据可视化功能
-  - 支持数据压缩，降低存储成本
-
 #### 4.2.8 Redis缓存模块
 
 - **职责**：提供高性能的数据缓存能力，存储实时分析结果和交易信号
 - **技术实现**：Redis 6.x
 - **核心功能**：
-  - 缓存实时订单簿数据（最新400档）
+  - 作为Golang原生处理和Bytewax处理的统一数据输出层
   - 使用Hash结构存储分析结果，每个交易对对应一个Hash键
-  - 使用List结构存储交易信号事件，支持下游系统消费
-  - 缓存告警规则配置
-  - 存储实时监控指标的聚合数据
   - 支持数据过期策略配置
   - 支持发布/订阅模式，用于模块间实时通信
-  - 作为Golang原生处理和Bytewax处理的统一数据输出层
 - **技术特性**：
   - 内存存储，亚毫秒级数据访问
   - Hash结构支持高效的字段级操作和查询
@@ -210,21 +147,6 @@ graph TB
   - 高并发支持，适合实时数据场景
   - 内置数据持久化机制
   - 支持分布式部署，可扩展性强
-- **交易信号存储设计**：
-  - **Key名**：`trading_signals`
-  - **数据结构**：Redis List，存储JSON格式的交易信号事件
-  - **信号结构**：
-    ```json
-    {
-      "instrument_id": "BTC-USDT",
-      "signal_value": 0.85,
-      "direction": "bullish",
-      "trigger_time": "2023-10-15T14:30:45Z",
-      "signal_source": "large_order_sentiment"
-    }
-    ```
-  - **操作**：使用`LPUSH`添加新信号，使用`BRPOP`或`LPOP`消费信号
-  - **过期策略**：设置适当的过期时间（如24小时），避免List无限增长
 
 ## 5. 数据流与交互流程
 
@@ -242,19 +164,13 @@ graph TB
   
     I --> K["Redis Hash存储"]
     J --> K
-    I --> L["InfluxDB存储"]
-    J --> L
-  
-    K --> M["数据查询"]
-    L --> M
-    M --> N["Vue监控模块"]
 ```
 
 ### 5.2 关键交互流程
 
 #### 5.2.1 数据获取与预处理流程
 
-1. WebSocket客户端启动时从Redis读取交易对配置（`config:trading_pairs`）
+1. WebSocket客户端启动时从Redis读取交易对配置**（`config:trading_pairs`）**
 2. 根据配置初始化并连接到OKEx API，订阅指定的交易对订单簿数据
 3. 启动定时任务（每20秒），监听Redis中交易对配置的变化
 4. 接收原始数据并进行解析
@@ -269,15 +185,7 @@ graph TB
    - 复杂分析需求：Redis List缓冲 + Bytewax处理
 3. 执行具体的分析算法
 4. 分析结果**实时写入**Redis对应的Hash结构中，每个交易对/分析类型使用独立的Hash键
-5. 通过异步任务/Worker将需要持久化的历史数据**异步写入**InfluxDB，避免阻塞实时路径
-
-#### 5.2.4 Vue监控模块交互流程
-
-1. 用户通过浏览器访问 Vue 监控应用
-2. Vue 应用通过 HTTP API 定期获取 WebSocket 连接状态信息
-3. Vue 应用建立 WebSocket 连接接收实时分析数据
-4. Vue 应用使用 ECharts 渲染实时图表和连接状态面板
-5. 连接状态每 5 秒自动刷新
+5. 分析结果直接存储在Redis中，无需额外持久化
 
 #### 5.2.5 动态订阅管理流程
 
@@ -315,15 +223,8 @@ graph TB
      - 等待订阅确认
      - 将该交易对添加到内存订阅状态
      - 记录日志：`Subscribed to {instrument_id}`
-3. **状态同步**：
-
-   - 更新内存中的已订阅集合
-   - 更新Redis系统监控指标（`system:monitoring`）：
-     - `active_pairs`：当前活跃交易对数量
-     - `websocket_connections`：当前WebSocket连接数
 
 **异常处理**：
-
 - 如果Redis读取失败，记录错误日志，使用当前订阅状态继续运行
 - 如果订阅/退订失败，重试最多3次，失败后记录告警
 - 如果配置的交易对超过10个，只订阅前10个，并记录告警日志
@@ -331,18 +232,12 @@ graph TB
 ### 5.3 异常处理流程
 
 1. WebSocket连接中断
-
    - 自动重连机制触发
    - 重连成功后重新获取完整订单簿数据
 2. 数据验证失败
-
    - 丢弃无效数据
    - 记录错误日志
    - 继续处理后续数据
-3. 分析模块异常
-
-   - 自动重启分析模块
-   - 确保系统整体可用性
 
 ## 6. 实时分析需求处理方式分析
 
@@ -373,10 +268,18 @@ graph TB
 **实时性要求**：≤50ms
 
 **历史数据需求**：
-
 - 完全不需要历史数据
 - 仅基于当前订单簿快照计算
 - 无时间窗口概念
+- 计算完成后直接写入Redis Hash结构 key: `analysis:resi_supp:{inst_id}`
+```json
+{
+  "resistance_low": "3182.9621875000003",
+  "resistance_high": "3186.0006875000003",
+  "support_low": "3182.0971875",
+  "support_high": "3184.4759375000003"
+}
+```
 
 #### 6.2.2 推荐处理方式
 
@@ -385,35 +288,29 @@ graph TB
 **理由**：
 
 1. **算法简单直接**：
-
    - 无需复杂的流处理能力
    - 简单的分箱、累加和比较操作
    - 适合命令式编程风格
 2. **极低延迟**：
-
    - 内存操作提供亚毫秒级数据访问
    - 400档数据的分箱统计 < 1ms
    - 局部极大值检测耗时可忽略
    - 整体计算远小于50ms限制
 3. **无状态依赖**：
-
    - 每次计算完全独立
    - 不需要维护时间窗口状态
    - 不需要历史数据对比
    - 降低内存开销和复杂度
 4. **并发性能优异**：
-
    - Golang的goroutine实现轻量级并发
    - 多交易对可并行计算，互不影响
    - 10个交易对并发仍可满足实时性
 5. **实现成本低**：
-
    - 无需Bytewax框架开销
    - 无跨语言通信开销
    - 代码逻辑清晰，易于维护和调优
 
 **实现要点**：
-
 - 预分配bins数组，避免运行时内存分配
 - 使用map存储各交易对的分析结果
 - 利用sync.Pool复用临时对象，减少GC压力
@@ -432,7 +329,6 @@ graph TB
 5. **交易信号生成**：当Sentiment >= 0.3（强烈看涨）或 Sentiment <= -0.3（强烈看跌）时，生成交易信号事件
 
 **复杂度分析**：
-
 - 时间复杂度：$O(n \log n)$（分位数计算需要排序）
 - 空间复杂度：$O(n)$（需要存储所有订单金额）
 - 计算量：中等（包含排序、指数运算、循环求和）
@@ -440,10 +336,15 @@ graph TB
 **实时性要求**：≤50ms
 
 **历史数据需求**：
-
 - 不需要时间序列历史数据
 - 仅需要当前订单簿的完整数据
-- 可能需要短期滑动窗口（数秒内）用于平滑Sentiment指标
+- 需要实现短期滑动窗口（5秒内）用于平滑Sentiment指标
+- 计算完成后直接写入Redis Hash结构 key: `analysis:sentiment:{inst_id}`
+```json
+{
+  "sentiment": 0.25
+}
+```
 
 #### 6.3.2 推荐处理方式
 
@@ -452,12 +353,10 @@ graph TB
 **理由**：
 
 1. **性能优势**：
-
    - Golang的排序算法（`sort.Float64s`）性能优异，400档数据排序耗时 < 1ms
    - 内存操作避免I/O开销，满足≤50ms延迟要求
    - Golang原生支持并发，可为多个交易对并行计算
-2. **计算复杂度可控**：
-
+2. **计算复杂度可控**： 
    - 虽然包含排序和指数运算，但数据量小（400档）
    - Golang的 `math.Exp()`性能高效
    - 整体计算可在数毫秒内完成
@@ -690,7 +589,7 @@ graph TB
   
     subgraph middleware["中间件层"]
         M1["Bytewax集群"]
-        M2["InfluxDB集群"]
+
         M3["Redis集群"]
         M4["配置中心"]
         M5["日志中心"]
@@ -701,7 +600,6 @@ graph TB
         A2["分析服务集群"]
         A3["监控告警服务"]
         A4["API网关"]
-        A5["Vue监控应用"]
     end
   
     infra --> middleware
@@ -722,13 +620,7 @@ graph TB
 - 节点数量：根据分析复杂度动态调整
 - 网络策略：仅允许访问Redis集群
 
-#### 7.2.3 InfluxDB集群
 
-- 部署方式：分布式集群
-- 节点数量：3个（最小配置），根据数据量扩展
-- 存储策略：使用SSD存储，配置合理的数据保留策略
-- 数据备份：定期备份数据，确保数据安全
-- 网络策略：仅允许内部服务访问
 
 #### 7.2.4 Redis集群
 
@@ -744,29 +636,18 @@ graph TB
 - 实例数量：根据分析负载动态调整
 - 负载均衡：通过API网关实现请求分发
 
-#### 7.2.6 Vue监控模块
 
-- 部署方式：静态资源部署（Nginx）或容器化（Docker）
-- 实例数量：建议2-3个实例，通过负载均衡提高可用性
-- 网络策略：允许外部访问，内部仅允许访问API网关和监控服务
-- 构建方式：使用Vite进行项目构建，生成静态资源
-- 静态资源CDN：可配置CDN加速静态资源访问
-- 配置管理：支持环境变量配置，区分开发/测试/生产环境
 
 ### 7.3 高可用性设计
 
 - **WebSocket客户端**：多实例部署，故障自动转移
 - **Bytewax集群**：分布式架构，支持节点故障恢复
-- **InfluxDB集群**：
-  - 多副本存储（建议3副本）确保数据可靠性
-  - 节点故障自动切换，保持服务可用性
-  - 支持数据分片，提高系统扩展性
+
 - **Redis集群**：
   - 主从复制架构，实现数据冗余
   - 哨兵模式或集群模式，实现自动故障转移
   - 数据持久化确保服务重启后数据不丢失
 - **分析服务**：多实例部署，通过负载均衡实现高可用
-- **Vue监控模块**：多实例部署，静态资源缓存，支持快速故障转移
 
 ## 8. 扩展性设计
 
@@ -790,19 +671,9 @@ graph TB
 - 通过负载均衡实现请求分发
 - 支持自动扩缩容
 
-#### 8.1.4 Vue监控模块扩展
 
-- 静态资源可通过CDN扩展分发能力
-- 多实例部署支持负载均衡
-- 组件化设计支持功能模块按需扩展
-- 支持自定义插件和主题扩展
 
-#### 8.1.5 InfluxDB集群扩展
 
-- 数据分片扩展：通过增加数据节点实现水平扩展，支持在线扩容
-- 副本扩展：根据可用性需求增加副本数量
-- 存储扩展：使用分布式存储系统（如S3）扩展存储容量
-- 计算资源扩展：根据查询负载增加查询节点
 
 #### 8.1.6 Redis集群扩展
 
@@ -821,16 +692,12 @@ graph TB
 
 - **WebSocket客户端**：每实例支持5-10个交易对
 - **Bytewax节点**：每节点支持2-5个分析任务
-- **InfluxDB集群**：
-  - 存储容量：根据数据保留策略和交易对数量规划，建议初始配置500GB SSD存储
-  - 写入吞吐量：每节点支持约100,000点/秒
-  - 查询负载：每查询节点支持约1000 QPS
+
 - **Redis集群**：
   - 内存容量：每主节点建议初始配置8-16GB内存
   - 连接数：每节点支持约10,000并发连接
   - 吞吐量：每主节点支持约100,000 OPS
 - **分析服务**：每实例支持5-10个并发请求
-- **Vue监控模块**：单实例支持50-100个并发用户，静态资源占用约100MB存储空间
 
 ### 8.4 扩展监控
 
@@ -845,12 +712,7 @@ graph TB
 - **性能监控**：CPU、内存、网络、磁盘使用率
 - **服务监控**：各组件的可用性和响应时间
 - **数据监控**：数据获取成功率、数据质量
-- **InfluxDB监控**：
-  - 写入/查询吞吐量、延迟
-  - 数据节点状态、副本状态
-  - 磁盘使用情况、数据压缩率
-  - 内存使用情况、查询缓存命中率
-  - 连接数、错误率
+
 - **Redis监控**：
   - 内存使用率、内存碎片率
 
@@ -871,12 +733,7 @@ graph TB
 - **定期备份**：关键配置和数据定期备份
 - **版本管理**：应用版本统一管理
 - **故障演练**：定期进行故障演练，提高系统稳定性
-- **InfluxDB维护**：
-  - 定期检查数据压缩率，优化存储
-  - 根据数据增长情况调整数据保留策略
-  - 定期执行数据备份，确保数据安全
-  - 监控查询性能，优化慢查询
-  - 定期检查节点状态，确保集群健康
+
 - **Redis维护**：
   - 定期检查内存使用情况，优化内存配置
   - 监控持久化操作，确保数据安全
@@ -916,7 +773,7 @@ graph TB
 
 - **低部署复杂度**：简化系统架构，减少维护成本
 - **低成本**：降低硬件资源需求和运营成本
-- **易集成**：与InfluxDB和Redis缓存共享Redis实例，提高资源利用率
+- **易集成**：与Redis缓存共享Redis实例，提高资源利用率
 
 ### 10.3 最终决策
 
@@ -935,7 +792,6 @@ graph TB
 1. **数据丢失风险**：
 
    - **应对**：配置Redis的RDB+AOF混合持久化，确保数据安全
-   - **应对**：关键数据定期持久化到InfluxDB作为备份
 2. **扩展性风险**：
 
    - **应对**：采用Redis集群模式，支持节点扩展
@@ -1014,7 +870,7 @@ run(df)
 
 1. **深度异常波动警告**、**流动性萎缩预警**：使用Bytewax从Redis List消费数据进行处理
 2. **架构调整**：在Redis模块和Bytewax模块之间添加自定义Source连接
-3. **数据安全**：实现数据备份机制，定期将关键数据持久化到InfluxDB
+3. **数据安全**：配置Redis的RDB+AOF混合持久化机制
 4. **监控增强**：加强Redis和Bytewax的状态监控，确保系统稳定性
 
 ## 12. OKEx API数据结构
@@ -1069,36 +925,7 @@ run(df)
 }
 ```
 
-## 13. InfluxDB存储设计
 
-### 13.1 订单簿数据表（orderbook_data）
-
-| 字段名        | 数据类型 | 标签 | 描述                             |
-| ------------- | -------- | ---- | -------------------------------- |
-| timestamp     | time     | -    | 数据时间戳                       |
-| instrument_id | tag      | -    | 交易对ID（如BTC-USDT）           |
-| price         | float    | -    | 价格                             |
-| amount        | float    | -    | 数量                             |
-| side          | tag      | -    | 买卖方向（buy/sell）             |
-| depth_level   | int      | -    | 深度档位                         |
-| data_type     | tag      | -    | 数据类型（snapshot/incremental） |
-
-### 13.2 分析结果表（analysis_results）
-
-| 字段名             | 数据类型 | 标签 | 描述                                                                       |
-| ------------------ | -------- | ---- | -------------------------------------------------------------------------- |
-| timestamp          | time     | -    | 分析时间戳                                                                 |
-| instrument_id      | tag      | -    | 交易对ID（如BTC-USDT）                                                     |
-| analysis_type      | tag      | -    | 分析类型（support_resistance/large_orders/depth_anomaly/liquidity_shrink） |
-| support_level_1    | float    | -    | 一级支撑位                                                                 |
-| support_level_2    | float    | -    | 二级支撑位                                                                 |
-| resistance_level_1 | float    | -    | 一级阻力位                                                                 |
-| resistance_level_2 | float    | -    | 二级阻力位                                                                 |
-| large_buy_orders   | float    | -    | 大额买单总量                                                               |
-| large_sell_orders  | float    | -    | 大额卖单总量                                                               |
-| anomaly_score      | float    | -    | 深度异常分数                                                               |
-| liquidity_index    | float    | -    | 流动性指数                                                                 |
-| alert_triggered    | bool     | -    | 是否触发告警                                                               |
 
 ## 14. Redis Hash结构设计
 
@@ -1184,221 +1011,9 @@ SCARD config:trading_pairs
 | active_pairs           | string   | 活跃交易对数量       |
 | avg_processing_latency | string   | 平均处理延迟（毫秒） |
 | redis_memory_usage     | string   | Redis内存使用情况    |
-| influxdb_write_rate    | string   | InfluxDB写入速率     |
 
-## 15. WebSocket 监控 API 设计
 
-### 15.1 API 概述
 
-为 Vue 监控模块提供 RESTful API，用于获取 WebSocket 连接状态和分析结果。
-
-### 15.2 WebSocket 连接状态查询 API
-
-#### 15.2.1 获取所有 WebSocket 连接状态
-
-**接口地址**：`GET /api/websocket/status`
-
-**请求参数**：无
-
-**响应参数**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| code | int | 是 | 响应状态码，200 表示成功 |
-| message | string | 是 | 响应消息 |
-| data | object | 是 | 连接状态数据 |
-
-**data 对象结构**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| total_connections | int | 是 | 总连接数 |
-| active_pairs | int | 是 | 活跃交易对数量 |
-| connections | array | 是 | 连接详情列表 |
-
-**connections 数组元素结构**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
-| websocket_url | string | 是 | WebSocket 连接地址 |
-| status | string | 是 | 连接状态：connected/disconnected/reconnecting |
-| connected_at | string | 是 | 连接建立时间（RFC3339 格式） |
-| last_message_at | string | 是 | 最后一次消息接收时间（RFC3339 格式） |
-| reconnect_count | int | 是 | 重连次数 |
-| messages_received | int | 是 | 已接收消息总数 |
-| last_error | string | 否 | 最后一次错误信息（如有） |
-
-**响应示例**：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "total_connections": 3,
-    "active_pairs": 3,
-    "connections": [
-      {
-        "instrument_id": "BTC-USDT",
-        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
-        "status": "connected",
-        "connected_at": "2026-01-01T10:00:00Z",
-        "last_message_at": "2026-01-01T10:05:30Z",
-        "reconnect_count": 0,
-        "messages_received": 1523,
-        "last_error": ""
-      },
-      {
-        "instrument_id": "ETH-USDT",
-        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
-        "status": "connected",
-        "connected_at": "2026-01-01T10:00:05Z",
-        "last_message_at": "2026-01-01T10:05:29Z",
-        "reconnect_count": 1,
-        "messages_received": 1487,
-        "last_error": ""
-      },
-      {
-        "instrument_id": "SOL-USDT",
-        "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
-        "status": "reconnecting",
-        "connected_at": "2026-01-01T10:00:10Z",
-        "last_message_at": "2026-01-01T10:04:15Z",
-        "reconnect_count": 3,
-        "messages_received": 1234,
-        "last_error": "connection timeout"
-      }
-    ]
-  }
-}
-```
-
-#### 15.2.2 获取单个交易对的 WebSocket 连接状态
-
-**接口地址**：`GET /api/websocket/status/{instrument_id}`
-
-**路径参数**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
-
-**响应参数**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| code | int | 是 | 响应状态码，200 表示成功，404 表示未找到 |
-| message | string | 是 | 响应消息 |
-| data | object | 是 | 连接状态数据（结构同上 connections 数组元素） |
-
-**响应示例**：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "instrument_id": "BTC-USDT",
-    "websocket_url": "wss://ws.okx.com:8443/ws/v5/public",
-    "status": "connected",
-    "connected_at": "2026-01-01T10:00:00Z",
-    "last_message_at": "2026-01-01T10:05:30Z",
-    "reconnect_count": 0,
-    "messages_received": 1523,
-    "last_error": ""
-  }
-}
-```
-
-### 15.3 实时分析结果查询 API
-
-#### 15.3.1 获取交易对分析结果
-
-**接口地址**：`GET /api/analysis/{instrument_id}`
-
-**路径参数**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| instrument_id | string | 是 | 交易对标识（如 BTC-USDT） |
-
-**响应参数**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| code | int | 是 | 响应状态码 |
-| message | string | 是 | 响应消息 |
-| data | object | 是 | 分析结果数据 |
-
-**data 对象结构**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| instrument_id | string | 是 | 交易对标识 |
-| support_resistance | object | 否 | 支撑位/阻力位数据 |
-| large_orders | object | 否 | 大额订单数据 |
-
-**large_orders 对象结构**：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| instrument_id | string | 是 | 交易对标识 |
-| analysis_time | string | 是 | 分析时间戳（Unix timestamp） |
-| large_buy_orders | string | 是 | 加权大额买单总金额（BullPower） |
-| large_sell_orders | string | 是 | 加权大额卖单总金额（BearPower） |
-| sentiment | string | 是 | 主力多空倾向指标，范围[-1,1] |
-| large_order_trend | string | 是 | 大额订单趋势（bullish/bearish/neutral） |
-
-**响应示例**：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "instrument_id": "BTC-USDT",
-    "support_resistance": {
-      "instrument_id": "BTC-USDT",
-      "analysis_time": "1735689600",
-      "support_level_1": "42000.50",
-      "support_level_2": "41500.25",
-      "resistance_level_1": "43000.75",
-      "resistance_level_2": "43500.00"
-    },
-    "large_orders": {
-      "instrument_id": "BTC-USDT",
-      "analysis_time": "1735689600",
-      "large_buy_orders": "1250000.00",
-      "large_sell_orders": "980000.00",
-      "sentiment": "0.12",
-      "large_order_trend": "neutral"
-    }
-  }
-}
-```
-
-### 15.4 错误响应格式
-
-所有 API 错误响应统一格式：
-
-```json
-{
-  "code": 500,
-  "message": "Internal server error",
-  "data": null
-}
-```
-
-**常见错误码**：
-
-| 错误码 | 说明 |
-|--------|------|
-| 200 | 成功 |
-| 400 | 请求参数错误 |
-| 404 | 资源不存在 |
-| 500 | 服务器内部错误 |
-| 503 | 服务暂时不可用 |
 
 ## 16. 风险与应对
 
