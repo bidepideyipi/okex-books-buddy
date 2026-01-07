@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/supermancell/okex-buddy/internal/utils"
 )
 
 // Manager manages order books for multiple instruments
@@ -19,6 +21,7 @@ type Manager struct {
 	depthWindows             map[string][]DepthWindowItem             // instrument_id -> sliding window of depth values
 	liquidityWindows         map[string][]LiquidityWindowItem         // instrument_id -> sliding window of liquidity metrics
 	supportResistanceWindows map[string][]SupportResistanceWindowItem // instrument_id -> sliding window of support/resistance levels
+	spreadWindows            map[string][]SpreadWindowItem            // instrument_id -> sliding window of spread values
 }
 
 // NewManager creates a new order book manager
@@ -29,6 +32,7 @@ func NewManager() *Manager {
 		depthWindows:             make(map[string][]DepthWindowItem),
 		liquidityWindows:         make(map[string][]LiquidityWindowItem),
 		supportResistanceWindows: make(map[string][]SupportResistanceWindowItem),
+		spreadWindows:            make(map[string][]SpreadWindowItem),
 	}
 }
 
@@ -351,15 +355,15 @@ func (m *Manager) GetTop400(instID string) (asks, bids []PriceLevel, err error) 
 //   - per-bin notional volume is accumulated
 //   - local maxima above a significance threshold are selected and sorted
 //     TODO 支撑位和阻力位之间的间隔太近了，没有什么实际意义
-func (m *Manager) ComputeSupportResistance(instID string, binCount int, significanceThreshold float64, topN int, minDistancePercent float64) (supports, resistances []float64, err error) {
+func (m *Manager) ComputeSupportResistance(instID string, binCount int, significanceThreshold float64, topN int, minDistancePercent float64) (supports, resistances []float64, spread float64, err error) {
 	// First, compute the current support and resistance levels
 	asks, bids, err := m.GetTop400(instID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	if len(asks) == 0 && len(bids) == 0 {
-		return nil, nil, fmt.Errorf("empty order book for %s", instID)
+		return nil, nil, 0, fmt.Errorf("empty order book for %s", instID)
 	}
 
 	if binCount <= 0 {
@@ -404,12 +408,12 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 	updateRange(asks)
 
 	if first || maxPrice <= minPrice {
-		return nil, nil, fmt.Errorf("invalid price range for %s", instID)
+		return nil, nil, 0, fmt.Errorf("invalid price range for %s", instID)
 	}
 
 	binWidth := (maxPrice - minPrice) / float64(binCount)
 	if binWidth <= 0 {
-		return nil, nil, fmt.Errorf("invalid bin width for %s", instID)
+		return nil, nil, 0, fmt.Errorf("invalid bin width for %s", instID)
 	}
 
 	bidVolumes := make([]float64, binCount)
@@ -535,10 +539,36 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 
 	// Add current result to sliding window for historical tracking
 	currentTime := time.Now().Unix()
+	// Calculate spread as the distance between highest support and lowest resistance
+	if len(supports) > 0 && len(resistances) > 0 {
+		maxSupport := supports[0]
+		minResistance := resistances[0]
+
+		// Find highest support (maximum value in supports)
+		for _, s := range supports {
+			if s > maxSupport {
+				maxSupport = s
+			}
+		}
+
+		// Find lowest resistance (minimum value in resistances)
+		for _, r := range resistances {
+			if r < minResistance {
+				minResistance = r
+			}
+		}
+
+		spread = minResistance - maxSupport
+	} else {
+		spread = 0 // No valid support/resistance pair to calculate spread
+	}
+
+	// Add current result to sliding window for historical tracking
 	m.supportResistanceWindows[instID] = append(m.supportResistanceWindows[instID], SupportResistanceWindowItem{
 		Data: SupportResistanceData{
 			Supports:    supports,
 			Resistances: resistances,
+			Spread:      spread,
 			Timestamp:   currentTime,
 		},
 		Timestamp: currentTime,
@@ -556,8 +586,118 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 	}
 	m.supportResistanceWindows[instID] = m.supportResistanceWindows[instID][startIndex:]
 
+	// Add current spread to sliding window for historical tracking
+	m.spreadWindows[instID] = append(m.spreadWindows[instID], SpreadWindowItem{
+		Spread:    spread,
+		Timestamp: currentTime,
+	})
+
+	// Keep only the most recent entries within a time window (e.g., 30 minutes)
+	cutoffTime = currentTime - maxWindowSeconds
+	startIndex = 0
+	for i, item := range m.spreadWindows[instID] {
+		if item.Timestamp > cutoffTime {
+			startIndex = i
+			break
+		}
+	}
+	m.spreadWindows[instID] = m.spreadWindows[instID][startIndex:]
+
 	//log.Printf("Computed support and resistance levels for %s: supports=%v, resistances=%v", instID, supports, resistances)
-	return supports, resistances, nil
+	return supports, resistances, spread, nil
+}
+
+// AnalyzeSpreadVolatility analyzes the spread changes over time and returns a metric
+// representing how significantly the spread has changed (positive for expansion, negative for contraction)
+func (m *Manager) AnalyzeSpreadVolatility(instID string, windowSizeMinutes int) (volatilityMetric float64, currentSpread float64, err error) {
+	if windowSizeMinutes <= 0 {
+		windowSizeMinutes = 5 // default to 5 minutes
+	}
+
+	spreads := m.spreadWindows[instID]
+	if len(spreads) < 2 {
+		return 0, 0, fmt.Errorf("insufficient spread data for %s", instID)
+	}
+
+	// Get the current spread (most recent)
+	currentSpread = spreads[len(spreads)-1].Spread
+
+	// Calculate the time threshold
+	currentTime := time.Now().Unix()
+	timeThreshold := int64(windowSizeMinutes * 60) // convert minutes to seconds
+
+	// Find the spread from the specified time window ago
+	var historicalSpread float64
+	minTimeDiff := int64(math.MaxInt64)
+	foundHistorical := false
+
+	// Look for the closest historical value near the target time window
+	targetTime := currentTime - timeThreshold // We want the value from approximately this time ago
+	for _, item := range spreads {
+		// Calculate time difference from the desired window time
+		timeDiff := int64(math.Abs(float64(targetTime - item.Timestamp)))
+		if timeDiff < minTimeDiff {
+			historicalSpread = item.Spread
+			minTimeDiff = timeDiff
+			foundHistorical = true
+		}
+	}
+
+	// Calculate the percentage change in spread
+	if foundHistorical && historicalSpread != 0 {
+		volatilityMetric = ((currentSpread - historicalSpread) / historicalSpread) * 100
+	} else if foundHistorical {
+		// If historical spread is 0, use absolute difference scaled appropriately
+		volatilityMetric = currentSpread * 100 // arbitrary scaling
+	} else {
+		volatilityMetric = 0 // No historical data to compare with
+	}
+
+	return volatilityMetric, currentSpread, nil
+}
+
+// AnalyzeSpreadZScore calculates a Z-score for the current spread relative to historical values
+// This provides a standardized measure of how unusual the current spread is
+func (m *Manager) AnalyzeSpreadZScore(instID string, windowSizeMinutes int) (zScore float64, currentSpread float64, err error) {
+	if windowSizeMinutes <= 0 {
+		windowSizeMinutes = 5 // default to 5 minutes
+	}
+
+	spreads := m.spreadWindows[instID]
+	if len(spreads) < 2 {
+		return 0, 0, fmt.Errorf("insufficient spread data for %s", instID)
+	}
+
+	// Calculate statistics for the specified time window
+	currentTime := time.Now().Unix()
+	cutoffTime := currentTime - int64(windowSizeMinutes*60)
+
+	// Collect spreads within the time window
+	var windowSpreads []float64
+	for _, item := range spreads {
+		if item.Timestamp >= cutoffTime {
+			windowSpreads = append(windowSpreads, item.Spread)
+		}
+	}
+
+	// If not enough data in the time window, use all available data
+	if len(windowSpreads) < 2 {
+		for _, item := range spreads {
+			windowSpreads = append(windowSpreads, item.Spread)
+		}
+	}
+
+	if len(windowSpreads) < 2 {
+		return 0, 0, fmt.Errorf("not enough spread data for %s", instID)
+	}
+
+	// Get the current spread
+	currentSpread = spreads[len(spreads)-1].Spread
+
+	// Calculate Z-score using utility function
+	zScore = utils.CalculateZScore(currentSpread, windowSpreads)
+
+	return zScore, currentSpread, nil
 }
 
 // ComputeLargeOrderDistribution computes large order distribution and sentiment
@@ -833,21 +973,15 @@ func (m *Manager) DetectDepthAnomaly(instID string, priceRangePercent float64, w
 		}, nil
 	}
 
-	// Calculate mean of historical depths
-	// 计算历史深度的平均值
-	var sum float64
-	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] { // Exclude current value from mean
-		sum += item.Depth
+	// Get historical depths (excluding current value)
+	historicalDepths := make([]float64, 0, len(m.depthWindows[instID])-1)
+	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] {
+		historicalDepths = append(historicalDepths, item.Depth)
 	}
-	historicalMean := sum / float64(len(m.depthWindows[instID])-1)
 
-	// Calculate standard deviation
-	var sumSquares float64
-	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] { // Exclude current value
-		deviation := item.Depth - historicalMean
-		sumSquares += deviation * deviation
-	}
-	stdDev := math.Sqrt(sumSquares / float64(len(m.depthWindows[instID])-1))
+	// Calculate statistics using utility functions
+	historicalMean := utils.CalculateMean(historicalDepths)
+	stdDev := utils.CalculateStdDev(historicalDepths)
 
 	// Calculate Z-score
 	zScore := 0.0
@@ -987,25 +1121,8 @@ func (m *Manager) CalculatePercentile(values []float64, percentile float64) floa
 	// Sort the values
 	sort.Float64s(sorted)
 
-	// Calculate index
-	idx := percentile * float64(len(sorted)-1)
-	lowerIdx := int(math.Floor(idx))
-	upperIdx := int(math.Ceil(idx))
-
-	if lowerIdx < 0 {
-		lowerIdx = 0
-	}
-	if upperIdx >= len(sorted) {
-		upperIdx = len(sorted) - 1
-	}
-
-	if lowerIdx == upperIdx {
-		return sorted[lowerIdx]
-	}
-
-	// Linear interpolation
-	weight := idx - float64(lowerIdx)
-	return sorted[lowerIdx] + weight*(sorted[upperIdx]-sorted[lowerIdx])
+	// Use utility function for percentile calculation
+	return utils.CalculatePercentile(sorted, percentile*100) // Convert to percentage (0.25 -> 25)
 }
 
 // PerformLinearRegression performs linear regression on time series data to calculate the slope
@@ -1016,29 +1133,18 @@ func (m *Manager) PerformLinearRegression(items []LiquidityWindowItem) float64 {
 		return 0
 	}
 
-	// Calculate means
-	var sumX, sumY, sumXY, sumX2 float64
-	for _, item := range items {
-		x := float64(item.Timestamp)
-		y := item.Metrics.Liquidity
-		sumX += x
-		sumY += y
-		sumXY += x * y
-		sumX2 += x * x
+	// Extract x and y values for regression
+	xValues := make([]float64, n)
+	yValues := make([]float64, n)
+	for i, item := range items {
+		xValues[i] = float64(item.Timestamp)
+		yValues[i] = item.Metrics.Liquidity
 	}
 
-	meanX := sumX / float64(n)
-	meanY := sumY / float64(n)
+	// Use utility function for linear regression
+	slope, _ := utils.PerformLinearRegression(xValues, yValues)
 
-	// Calculate slope using least squares method
-	numerator := sumXY - float64(n)*meanX*meanY
-	denominator := sumX2 - float64(n)*meanX*meanX
-
-	if denominator == 0 {
-		return 0
-	}
-
-	return numerator / denominator
+	return slope
 }
 
 /*
@@ -1162,7 +1268,6 @@ func (m *Manager) DetectLiquidityShrinkage(instID string, nearPriceDeltaPercent 
 	case 3:
 		if slope < 2*slopeThreshold { // Severe negative trend 严重负趋势
 			warningLevel = "severe" //重：3个条件满足且斜率达到严重程度
-			log.Printf("InstId: %v, Severe negative trend detected: %v, warningLevel: %v", instID, slope, warningLevel)
 		} else {
 			warningLevel = "moderate" //中：3个条件满足但斜率未达到严重程度
 		}

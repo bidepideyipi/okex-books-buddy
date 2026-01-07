@@ -81,14 +81,32 @@ func main() {
 				}
 
 				// Compute support/resistance levels using in-memory order book and store in Redis
-				supports, resistances, err := obManager.ComputeSupportResistance(instID, cfg.Analysis.SupportResistanceBinCount, cfg.Analysis.SupportResistanceSignificanceThreshold, cfg.Analysis.SupportResistanceTopN, cfg.Analysis.SupportResistanceMinDistancePercent)
+				supports, resistances, spread, err := obManager.ComputeSupportResistance(instID, cfg.Analysis.SupportResistanceBinCount, cfg.Analysis.SupportResistanceSignificanceThreshold, cfg.Analysis.SupportResistanceTopN, cfg.Analysis.SupportResistanceMinDistancePercent)
 				if err != nil {
 					log.Printf("Failed to compute support/resistance for %s: %v", instID, err)
 					continue
 				}
 
-				if err := redisClient.StoreSupportResistance(instID, supports, resistances); err != nil {
+				if err := redisClient.StoreSupportResistance(instID, supports, resistances, spread); err != nil {
 					log.Printf("Failed to store support/resistance for %s: %v", instID, err)
+				}
+
+				// Analyze and store spread Z-score metric
+				zScore, currentSpread, err := obManager.AnalyzeSpreadZScore(instID, 5) // 5-minute window
+				if err != nil {
+					log.Printf("Failed to analyze spread Z-score for %s: %v", instID, err)
+				} else {
+					if math.Abs(zScore) > 2.5 { // Only log if volatility is significant (>2.5 standard deviations)
+						trend := "expanded"
+						if zScore < 0 {
+							trend = "contracted"
+						}
+						log.Printf("\033[33mSpread %s significantly (Z-Score=%.4f) for %s: current spread: %.6f\033[0m",
+							trend, zScore, instID, currentSpread)
+					}
+					if err := redisClient.StoreSpreadZScore(instID, zScore, currentSpread); err != nil {
+						log.Printf("Failed to store spread Z-score for %s: %v", instID, err)
+					}
 				}
 
 				/*
@@ -185,9 +203,9 @@ func main() {
 				if err != nil {
 					log.Printf("Failed to detect depth anomaly for %s: %v", instID, err)
 				} else {
-					if depthAnomaly.Anomaly {
+					if depthAnomaly.Anomaly && depthAnomaly.Intensity > 3 {
 						log.Printf("%sDepth Anomaly Detected for %s: Z-Score=%.4f, Direction=%s, Intensity=%.4f%s",
-							config.Red, instID, depthAnomaly.ZScore, depthAnomaly.Direction, depthAnomaly.Intensity, config.Reset)
+							config.Green, instID, depthAnomaly.ZScore, depthAnomaly.Direction, depthAnomaly.Intensity, config.Reset)
 					}
 
 					// Store depth anomaly in Redis
@@ -215,7 +233,7 @@ func main() {
 							warningColor = config.Reset
 						}
 
-						if warningColor == config.Red {
+						if warningColor == config.Red && liquidityShrink.Slope < -20 {
 							log.Printf("%sLiquidity Shrinkage Warning for %s: Level=%s, Liquidity=%.4f, Slope=%.6f%s",
 								warningColor, instID, liquidityShrink.WarningLevel, liquidityShrink.Liquidity, liquidityShrink.Slope, config.Reset)
 						}

@@ -99,7 +99,7 @@ func (c *Client) HashSave(hashKey string, fields map[string]interface{}) error {
 }
 
 // StoreSupportResistance stores support and resistance levels for an instrument in Redis Hash
-func (c *Client) StoreSupportResistance(instID string, supports, resistances []float64) error {
+func (c *Client) StoreSupportResistance(instID string, supports, resistances []float64, spread float64) error {
 	hashKey := fmt.Sprintf(config.SupportResistanceKey, instID)
 
 	fields := map[string]interface{}{
@@ -120,8 +120,47 @@ func (c *Client) StoreSupportResistance(instID string, supports, resistances []f
 		fields["resistance_low"] = resistances[1]
 	}
 
+	// Store the spread between highest support and lowest resistance
+	fields["spread"] = spread
+
 	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
 		return fmt.Errorf("failed to store support/resistance levels: %w", err)
+	}
+
+	return nil
+}
+
+// StoreSpreadVolatility stores the spread volatility metric for an instrument in Redis Hash
+func (c *Client) StoreSpreadVolatility(instID string, volatilityMetric float64, currentSpread float64) error {
+	hashKey := fmt.Sprintf(config.SupportResistanceKey, instID) // Use the same key space
+
+	fields := map[string]interface{}{
+		"instrument_id":     instID,
+		"analysis_time":     time.Now().Unix(),
+		"spread_volatility": volatilityMetric, // Percentage change in spread
+		"current_spread":    currentSpread,    // Current spread value
+	}
+
+	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to store spread volatility: %w", err)
+	}
+
+	return nil
+}
+
+// StoreSpreadZScore stores the spread Z-score for an instrument in Redis Hash
+func (c *Client) StoreSpreadZScore(instID string, zScore float64, currentSpread float64) error {
+	hashKey := fmt.Sprintf(config.SupportResistanceKey, instID) // Use the same key space
+
+	fields := map[string]interface{}{
+		"instrument_id":  instID,
+		"analysis_time":  time.Now().Unix(),
+		"spread_zscore":  zScore,        // Z-score of current spread vs historical
+		"current_spread": currentSpread, // Current spread value
+	}
+
+	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to store spread Z-score: %w", err)
 	}
 
 	return nil

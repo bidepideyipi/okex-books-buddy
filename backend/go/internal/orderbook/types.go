@@ -79,7 +79,31 @@ type DepthWindowItem struct {
 type SupportResistanceData struct {
 	Supports    []float64 `json:"supports"`
 	Resistances []float64 `json:"resistances"`
+	Spread      float64   `json:"spread"`
 	Timestamp   int64     `json:"timestamp"`
+}
+
+// ToRedisMap converts SupportResistanceData to a map for Redis storage
+func (s SupportResistanceData) ToRedisMap() map[string]interface{} {
+	fields := map[string]interface{}{
+		"timestamp": s.Timestamp,
+		"spread":    s.Spread,
+	}
+
+	if len(s.Supports) > 0 {
+		fields["support_high"] = s.Supports[0]
+	}
+	if len(s.Supports) > 1 {
+		fields["support_low"] = s.Supports[1]
+	}
+	if len(s.Resistances) > 0 {
+		fields["resistance_high"] = s.Resistances[0]
+	}
+	if len(s.Resistances) > 1 {
+		fields["resistance_low"] = s.Resistances[1]
+	}
+
+	return fields
 }
 
 // SupportResistanceWindowItem represents an item in the support/resistance sliding window
@@ -110,5 +134,11 @@ type LiquidityShrinkData struct {
 // LiquidityWindowItem represents an item in the liquidity sliding window
 type LiquidityWindowItem struct {
 	Metrics   LiquidityMetrics
+	Timestamp int64
+}
+
+// SpreadWindowItem represents an item in the spread sliding window
+type SpreadWindowItem struct {
+	Spread    float64
 	Timestamp int64
 }

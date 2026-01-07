@@ -39,7 +39,7 @@ The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
 2. **Configure trading pairs in Redis**
    ```bash
    # Add trading pairs to monitor (use SWAP contracts for real-time data)
-   redis-cli SADD trading_pairs:active BTC-USDT-SWAP ETH-USDT-SWAP DOGE-USDT-SWAP
+   redis-cli SADD trading_pairs:active ETH-USDT-SWAP DOGE-USDT-SWAP
    
    # Verify configuration
    redis-cli SMEMBERS trading_pairs:active
@@ -232,6 +232,14 @@ largeBuyNotional, largeSellNotional, sentiment, err := obManager.ComputeLargeOrd
 // 检测SOL-USDT-SWAP的深度异常
 depthAnomaly, err := obManager.DetectDepthAnomaly("SOL-USDT-SWAP", 0.5, 30, 2.0)
 ```
+**输出日志示例**
+```text
+Depth Anomaly Detected for DOGE-USDT-SWAP: Z-Score=-13.7423, Direction=decrease, Intensity=13.7423
+- Z值为-13.7423：这表示当前监控价格区间内的深度（总订单量）比历史平均值低了约13.74个标准差。代码中数值超出±3个标准差就会打出日志
+- 方向=下跌：负的Z值明确指示订单簿深度相较历史平均水平急剧下降。这意味着在监控的价格区间内，大量订单已被撤走
+- 强度=13.7423：这个数值就是Z值的绝对值代表了信号强度
+系统刚启动或未积累足够的历史数据，均值和标准差的计算将无法反映真实的市场状况，从而产生大量“假阳性”警报
+```
 
 ### 4. DetectLiquidityShrinkage
 
@@ -252,6 +260,16 @@ depthAnomaly, err := obManager.DetectDepthAnomaly("SOL-USDT-SWAP", 0.5, 30, 2.0)
 ```go
 // 检测DOGE-USDT-SWAP的流动性收缩情况
 liquidityShrinkData, err := obManager.DetectLiquidityShrinkage("DOGE-USDT-SWAP", 0.5, 30, 1800, -0.01)
+```
+```text
+日志输出: Liquidity Shrinkage Warning for BTC-USDT-SWAP: Level=severe, Liquidity=27717.2699, Slope=-1.552002
+严重负趋势：触发这个日志需要3个条件满足且斜率达到严重程度
+3个条件分别是
+- Low absolute liquidity 绝对流动性低
+- Negative trend 负趋势
+- High spread 高价差
+ Slope 值就像一个速度表。Slope = -82.74意味着流动性正在“高速下滑”，表明市场深度正在经历一场极其迅速和剧烈的恶化，需要高度警惕
+ 代码中当Slope<-20才触发这条日志
 ```
 
 ## 参数组合优化
