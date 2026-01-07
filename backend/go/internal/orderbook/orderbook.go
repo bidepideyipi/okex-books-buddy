@@ -14,15 +14,21 @@ import (
 
 // Manager manages order books for multiple instruments
 type Manager struct {
-	books        map[string]*OrderBook               // instrument_id -> order book
-	sentimentMap map[string][]PriceLevelWithTimeItem // instrument_id -> sliding window of sentiment values
+	books                    map[string]*OrderBook                    // instrument_id -> order book
+	sentimentMap             map[string][]PriceLevelWithTimeItem      // instrument_id -> sliding window of sentiment values
+	depthWindows             map[string][]DepthWindowItem             // instrument_id -> sliding window of depth values
+	liquidityWindows         map[string][]LiquidityWindowItem         // instrument_id -> sliding window of liquidity metrics
+	supportResistanceWindows map[string][]SupportResistanceWindowItem // instrument_id -> sliding window of support/resistance levels
 }
 
 // NewManager creates a new order book manager
 func NewManager() *Manager {
 	return &Manager{
-		books:        make(map[string]*OrderBook),
-		sentimentMap: make(map[string][]PriceLevelWithTimeItem),
+		books:                    make(map[string]*OrderBook),
+		sentimentMap:             make(map[string][]PriceLevelWithTimeItem),
+		depthWindows:             make(map[string][]DepthWindowItem),
+		liquidityWindows:         make(map[string][]LiquidityWindowItem),
+		supportResistanceWindows: make(map[string][]SupportResistanceWindowItem),
 	}
 }
 
@@ -344,7 +350,9 @@ func (m *Manager) GetTop400(instID string) (asks, bids []PriceLevel, err error) 
 //   - price range is divided into bins
 //   - per-bin notional volume is accumulated
 //   - local maxima above a significance threshold are selected and sorted
-func (m *Manager) ComputeSupportResistance(instID string, binCount int, significanceThreshold float64, topN int) (supports, resistances []float64, err error) {
+//     TODO 支撑位和阻力位之间的间隔太近了，没有什么实际意义
+func (m *Manager) ComputeSupportResistance(instID string, binCount int, significanceThreshold float64, topN int, minDistancePercent float64) (supports, resistances []float64, err error) {
+	// First, compute the current support and resistance levels
 	asks, bids, err := m.GetTop400(instID)
 	if err != nil {
 		return nil, nil, err
@@ -362,6 +370,9 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 	}
 	if significanceThreshold <= 0 {
 		significanceThreshold = 1.5
+	}
+	if minDistancePercent <= 0 {
+		minDistancePercent = 0.5
 	}
 
 	// Determine price range from bids and asks
@@ -488,15 +499,62 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 		return minPrice + (float64(idx)+0.5)*binWidth
 	}
 
-	// Collect top-N support levels from bids
-	for i := 0; i < len(bidPeaks) && i < topN; i++ {
-		supports = append(supports, binCenter(bidPeaks[i].Index))
+	// Collect top-N support levels from bids with minimum distance filtering
+	for i := 0; i < len(bidPeaks) && len(supports) < topN; i++ {
+		candidate := binCenter(bidPeaks[i].Index)
+		// Check distance from all existing supports
+		tooClose := false
+		for _, existing := range supports {
+			diffPercent := math.Abs((candidate-existing)/existing) * 100
+			if diffPercent < minDistancePercent {
+				tooClose = true
+				break
+			}
+		}
+		if !tooClose {
+			supports = append(supports, candidate)
+		}
 	}
 
-	// Collect top-N resistance levels from asks
-	for i := 0; i < len(askPeaks) && i < topN; i++ {
-		resistances = append(resistances, binCenter(askPeaks[i].Index))
+	// Collect top-N resistance levels from asks with minimum distance filtering
+	for i := 0; i < len(askPeaks) && len(resistances) < topN; i++ {
+		candidate := binCenter(askPeaks[i].Index)
+		// Check distance from all existing resistances
+		tooClose := false
+		for _, existing := range resistances {
+			diffPercent := math.Abs((candidate-existing)/existing) * 100
+			if diffPercent < minDistancePercent {
+				tooClose = true
+				break
+			}
+		}
+		if !tooClose {
+			resistances = append(resistances, candidate)
+		}
 	}
+
+	// Add current result to sliding window for historical tracking
+	currentTime := time.Now().Unix()
+	m.supportResistanceWindows[instID] = append(m.supportResistanceWindows[instID], SupportResistanceWindowItem{
+		Data: SupportResistanceData{
+			Supports:    supports,
+			Resistances: resistances,
+			Timestamp:   currentTime,
+		},
+		Timestamp: currentTime,
+	})
+
+	// Keep only the most recent entries within a time window (e.g., 30 minutes)
+	const maxWindowSeconds = 1800 // 30 minutes
+	cutoffTime := currentTime - maxWindowSeconds
+	startIndex := 0
+	for i, item := range m.supportResistanceWindows[instID] {
+		if item.Timestamp > cutoffTime {
+			startIndex = i
+			break
+		}
+	}
+	m.supportResistanceWindows[instID] = m.supportResistanceWindows[instID][startIndex:]
 
 	//log.Printf("Computed support and resistance levels for %s: supports=%v, resistances=%v", instID, supports, resistances)
 	return supports, resistances, nil
@@ -662,4 +720,474 @@ func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha f
 	}
 
 	return largeBuyNotional, largeSellNotional, sentiment, nil
+}
+
+// CalculateDepthInRange calculates the total depth within a given price range around the mid price
+func (m *Manager) CalculateDepthInRange(instID string, priceRangePercent float64) (float64, error) {
+	asks, bids, err := m.GetTop400(instID)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(asks) == 0 || len(bids) == 0 {
+		return 0, fmt.Errorf("insufficient data for %s: need both asks and bids", instID)
+	}
+
+	// Calculate mid price
+	bestBid, err1 := strconv.ParseFloat(bids[0].Price, 64)
+	bestAsk, err2 := strconv.ParseFloat(asks[0].Price, 64)
+	if err1 != nil || err2 != nil {
+		return 0, fmt.Errorf("invalid best bid/ask prices for %s", instID)
+	}
+
+	midPrice := (bestBid + bestAsk) / 2.0
+	if midPrice <= 0 {
+		return 0, fmt.Errorf("invalid mid price for %s", instID)
+	}
+
+	// Calculate price range boundaries
+	priceRange := midPrice * priceRangePercent / 100.0 // Convert percentage to absolute value
+	minPrice := midPrice - priceRange
+	maxPrice := midPrice + priceRange
+
+	var totalDepth float64
+
+	// Calculate depth for bids (prices >= minPrice and <= maxPrice)
+	for _, bid := range bids {
+		bidPrice, err := strconv.ParseFloat(bid.Price, 64)
+		if err != nil {
+			continue
+		}
+		if bidPrice >= minPrice && bidPrice <= maxPrice {
+			bidSize, err := strconv.ParseFloat(bid.Size, 64)
+			if err != nil {
+				continue
+			}
+			// Depth = price * quantity for notional value
+			totalDepth += bidPrice * bidSize
+		}
+	}
+
+	// Calculate depth for asks (prices >= minPrice and <= maxPrice)
+	for _, ask := range asks {
+		askPrice, err := strconv.ParseFloat(ask.Price, 64)
+		if err != nil {
+			continue
+		}
+		if askPrice >= minPrice && askPrice <= maxPrice {
+			askSize, err := strconv.ParseFloat(ask.Size, 64)
+			if err != nil {
+				continue
+			}
+			// Depth = price * quantity for notional value
+			totalDepth += askPrice * askSize
+		}
+	}
+
+	return totalDepth, nil
+}
+
+// DetectDepthAnomaly detects anomalies in the order book depth using Z-score
+// 检测订单簿深度异常情况，使用Z分数
+func (m *Manager) DetectDepthAnomaly(instID string, priceRangePercent float64, windowSize int, zThreshold float64) (*DepthAnomalyData, error) {
+	// Calculate current depth in the specified range
+	// 计算指定价格范围内的当前深度
+	currentDepth, err := m.CalculateDepthInRange(instID, priceRangePercent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set default parameters if invalid
+	if windowSize <= 0 {
+		windowSize = 30 // Default to 30 data points
+	}
+	if zThreshold <= 0 {
+		zThreshold = 2.0 // Default to 2.0 standard deviations
+	}
+
+	currentTime := time.Now().Unix()
+
+	// Add current depth to the sliding window
+	m.depthWindows[instID] = append(m.depthWindows[instID], DepthWindowItem{
+		Depth:     currentDepth,
+		Timestamp: currentTime,
+	})
+
+	// Keep only the most recent windowSize entries
+	if len(m.depthWindows[instID]) > windowSize {
+		startIndex := len(m.depthWindows[instID]) - windowSize
+		m.depthWindows[instID] = m.depthWindows[instID][startIndex:]
+	}
+
+	// If we don't have enough data points yet, return normal state
+	if len(m.depthWindows[instID]) < 2 {
+		return &DepthAnomalyData{
+			Anomaly:   false,
+			ZScore:    0,
+			Depth:     currentDepth,
+			Mean:      currentDepth,
+			StdDev:    0,
+			Timestamp: currentTime,
+			Direction: "", // Not enough data to determine direction
+			Intensity: 0,
+		}, nil
+	}
+
+	// Calculate mean of historical depths
+	// 计算历史深度的平均值
+	var sum float64
+	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] { // Exclude current value from mean
+		sum += item.Depth
+	}
+	historicalMean := sum / float64(len(m.depthWindows[instID])-1)
+
+	// Calculate standard deviation
+	var sumSquares float64
+	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] { // Exclude current value
+		deviation := item.Depth - historicalMean
+		sumSquares += deviation * deviation
+	}
+	stdDev := math.Sqrt(sumSquares / float64(len(m.depthWindows[instID])-1))
+
+	// Calculate Z-score
+	zScore := 0.0
+	if stdDev > 0 {
+		zScore = (currentDepth - historicalMean) / stdDev
+	}
+
+	// Determine if it's an anomaly
+	isAnomaly := math.Abs(zScore) > zThreshold
+
+	// Determine direction and intensity
+	direction := ""
+	if zScore > zThreshold {
+		direction = "increase" // Depth is significantly higher than normal 深度显著高于正常水平
+	} else if zScore < -zThreshold {
+		direction = "decrease" // Depth is significantly lower than normal 深度显著低于正常水平
+	}
+
+	intensity := math.Abs(zScore)
+
+	result := &DepthAnomalyData{
+		Anomaly:   isAnomaly,
+		ZScore:    zScore,
+		Depth:     currentDepth,
+		Mean:      historicalMean,
+		StdDev:    stdDev,
+		Timestamp: currentTime,
+		Direction: direction,
+		Intensity: intensity,
+	}
+
+	return result, nil
+}
+
+// ToRedisMap converts DepthAnomalyData to a map for Redis storage
+func (d *DepthAnomalyData) ToRedisMap() map[string]interface{} {
+	return map[string]interface{}{
+		"anomaly":   d.Anomaly,
+		"z_score":   d.ZScore,
+		"depth":     d.Depth,
+		"mean":      d.Mean,
+		"std_dev":   d.StdDev,
+		"direction": d.Direction,
+		"intensity": d.Intensity,
+		"timestamp": d.Timestamp,
+	}
+}
+
+// CalculateLiquidityMetrics calculates the liquidity metrics for an instrument
+// 计算INST的流动性指标
+func (m *Manager) CalculateLiquidityMetrics(instID string, nearPriceDeltaPercent float64) (*LiquidityMetrics, error) {
+	asks, bids, err := m.GetTop400(instID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(asks) == 0 || len(bids) == 0 {
+		return nil, fmt.Errorf("insufficient data for %s: need both asks and bids", instID)
+	}
+
+	// Calculate mid price
+	bestBidPrice, err1 := strconv.ParseFloat(bids[0].Price, 64)
+	bestAskPrice, err2 := strconv.ParseFloat(asks[0].Price, 64)
+	if err1 != nil || err2 != nil {
+		return nil, fmt.Errorf("invalid best bid/ask prices for %s", instID)
+	}
+
+	midPrice := (bestBidPrice + bestAskPrice) / 2.0
+	if midPrice <= 0 {
+		return nil, fmt.Errorf("invalid mid price for %s", instID)
+	}
+
+	// Calculate spread
+	effectiveSpread := (bestAskPrice - bestBidPrice) / midPrice
+
+	// Calculate near-price depth
+	priceRange := midPrice * nearPriceDeltaPercent / 100.0
+	minPrice := midPrice - priceRange
+	maxPrice := midPrice + priceRange
+
+	var totalDepth float64
+
+	// Calculate depth for bids (prices >= minPrice and <= maxPrice)
+	for _, bid := range bids {
+		bidPrice, err := strconv.ParseFloat(bid.Price, 64)
+		if err != nil {
+			continue
+		}
+		if bidPrice >= minPrice && bidPrice <= maxPrice {
+			bidSize, err := strconv.ParseFloat(bid.Size, 64)
+			if err != nil {
+				continue
+			}
+			totalDepth += bidSize // Using quantity, not notional value for depth
+		}
+	}
+
+	// Calculate depth for asks (prices >= minPrice and <= maxPrice)
+	for _, ask := range asks {
+		askPrice, err := strconv.ParseFloat(ask.Price, 64)
+		if err != nil {
+			continue
+		}
+		if askPrice >= minPrice && askPrice <= maxPrice {
+			askSize, err := strconv.ParseFloat(ask.Size, 64)
+			if err != nil {
+				continue
+			}
+			totalDepth += askSize // Using quantity, not notional value for depth
+		}
+	}
+
+	// Calculate composite liquidity metric
+	liquidity := totalDepth / (1 + effectiveSpread)
+
+	currentTime := time.Now().Unix()
+
+	return &LiquidityMetrics{
+		Spread:    effectiveSpread,
+		Depth:     totalDepth,
+		Liquidity: liquidity,
+		Timestamp: currentTime,
+	}, nil
+}
+
+// CalculatePercentile calculates the percentile value from a slice of float64 values
+// 计算float64值切片的百分位数
+func (m *Manager) CalculatePercentile(values []float64, percentile float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	// Make a copy to avoid modifying the original slice
+	sorted := make([]float64, len(values))
+	copy(sorted, values)
+
+	// Sort the values
+	sort.Float64s(sorted)
+
+	// Calculate index
+	idx := percentile * float64(len(sorted)-1)
+	lowerIdx := int(math.Floor(idx))
+	upperIdx := int(math.Ceil(idx))
+
+	if lowerIdx < 0 {
+		lowerIdx = 0
+	}
+	if upperIdx >= len(sorted) {
+		upperIdx = len(sorted) - 1
+	}
+
+	if lowerIdx == upperIdx {
+		return sorted[lowerIdx]
+	}
+
+	// Linear interpolation
+	weight := idx - float64(lowerIdx)
+	return sorted[lowerIdx] + weight*(sorted[upperIdx]-sorted[lowerIdx])
+}
+
+// PerformLinearRegression performs linear regression on time series data to calculate the slope
+// 对时间序列数据进行线性回归，计算斜率
+func (m *Manager) PerformLinearRegression(items []LiquidityWindowItem) float64 {
+	n := len(items)
+	if n < 2 {
+		return 0
+	}
+
+	// Calculate means
+	var sumX, sumY, sumXY, sumX2 float64
+	for _, item := range items {
+		x := float64(item.Timestamp)
+		y := item.Metrics.Liquidity
+		sumX += x
+		sumY += y
+		sumXY += x * y
+		sumX2 += x * x
+	}
+
+	meanX := sumX / float64(n)
+	meanY := sumY / float64(n)
+
+	// Calculate slope using least squares method
+	numerator := sumXY - float64(n)*meanX*meanY
+	denominator := sumX2 - float64(n)*meanX*meanX
+
+	if denominator == 0 {
+		return 0
+	}
+
+	return numerator / denominator
+}
+
+/*
+参数说明 ：
+DetectLiquidityShrinkage detects liquidity shrinkage using multiple conditions
+- instID ：交易对ID（如 "BTC-USDT"）
+- nearPriceDeltaPercent ：价格附近的百分比阈值（用于计算流动性）
+- shortWindowSeconds ：短期趋势分析窗口（秒）
+- longWindowSeconds ：长期基准比较窗口（秒）
+- slopeThreshold ：流动性变化斜率阈值（负值表示收缩趋势）
+返回值 ：
+
+- *LiquidityShrinkData ：包含流动性状态、警告级别等信息的结构体
+- error ：可能的错误信息
+*/
+func (m *Manager) DetectLiquidityShrinkage(instID string, nearPriceDeltaPercent float64, shortWindowSeconds int, longWindowSeconds int, slopeThreshold float64) (*LiquidityShrinkData, error) {
+	// Calculate current liquidity metrics
+	currentMetrics, err := m.CalculateLiquidityMetrics(instID, nearPriceDeltaPercent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set default parameters if invalid
+	if shortWindowSeconds <= 0 {
+		shortWindowSeconds = 30 // 短期趋势分析窗口 Default to 30 seconds
+	}
+	if longWindowSeconds <= 0 {
+		longWindowSeconds = 1800 // 长期基准比较窗口 Default to 30 minutes
+	}
+	if slopeThreshold > 0 {
+		slopeThreshold = -slopeThreshold // Ensure it's negative 确保为负值（表示收缩趋势）
+	} else if slopeThreshold == 0 {
+		slopeThreshold = -0.01 // Default slope threshold 默认斜率阈值
+	}
+	if nearPriceDeltaPercent <= 0 {
+		nearPriceDeltaPercent = 0.5 // Default to 0.5%
+	}
+
+	currentTime := time.Now().Unix()
+
+	// Add current metrics to the sliding window
+	// 添加当前指标到滑动窗口
+	m.liquidityWindows[instID] = append(m.liquidityWindows[instID], LiquidityWindowItem{
+		Metrics:   *currentMetrics,
+		Timestamp: currentTime,
+	})
+
+	// Keep only the most recent entries within the long window
+	// 保持滑动窗口内最新的条目，仅保留长期基准比较窗口内的数据
+	cutoffTime := currentTime - int64(longWindowSeconds)
+	startIndex := 0
+	for i, item := range m.liquidityWindows[instID] {
+		if item.Timestamp > cutoffTime {
+			startIndex = i
+			break
+		}
+	}
+	m.liquidityWindows[instID] = m.liquidityWindows[instID][startIndex:]
+
+	// If we don't have enough data points yet, return normal state
+	if len(m.liquidityWindows[instID]) < 2 {
+		return &LiquidityShrinkData{
+			Warning:      false,
+			WarningLevel: "none",
+			Liquidity:    currentMetrics.Liquidity,
+			Spread:       currentMetrics.Spread,
+			Depth:        currentMetrics.Depth,
+			Slope:        0,
+			Timestamp:    currentTime,
+		}, nil
+	}
+
+	// Separate data for short-term trend analysis and long-term percentiles
+	// 分离短期趋势分析数据和长期基准比较数据
+	shortWindowStart := currentTime - int64(shortWindowSeconds)
+	var shortWindowItems []LiquidityWindowItem
+	var longWindowLiquidity []float64
+	var longWindowSpread []float64
+
+	for _, item := range m.liquidityWindows[instID] {
+		if item.Timestamp >= shortWindowStart {
+			shortWindowItems = append(shortWindowItems, item)
+		}
+		longWindowLiquidity = append(longWindowLiquidity, item.Metrics.Liquidity)
+		longWindowSpread = append(longWindowSpread, item.Metrics.Spread)
+	}
+
+	// Calculate slope for short-term trend
+	// 计算短期趋势分析的斜率
+	slope := m.PerformLinearRegression(shortWindowItems)
+
+	// Calculate percentiles for long-term comparison
+	// 计算长期基准比较的25%和75%分位数
+	liquidity25thPercentile := m.CalculatePercentile(longWindowLiquidity, 0.25)
+	spread75thPercentile := m.CalculatePercentile(longWindowSpread, 0.75)
+
+	// Check conditions for liquidity shrinkage
+	conditionA := currentMetrics.Liquidity < liquidity25thPercentile // Low absolute liquidity 绝对流动性低
+	conditionB := slope < slopeThreshold                             // Negative trend 负趋势
+	conditionC := currentMetrics.Spread > spread75thPercentile       // High spread 高价差
+
+	// Count satisfied conditions
+	satisfiedConditions := 0
+	if conditionA {
+		satisfiedConditions++
+	}
+	if conditionB {
+		satisfiedConditions++
+	}
+	if conditionC {
+		satisfiedConditions++
+	}
+
+	// Determine warning level
+	// 根据满足条件的数量确定警告级别
+	warning := satisfiedConditions >= 2
+	warningLevel := "none"
+	switch satisfiedConditions {
+	case 2:
+		warningLevel = "light" //轻：2个条件满足
+	case 3:
+		if slope < 2*slopeThreshold { // Severe negative trend 严重负趋势
+			warningLevel = "severe" //重：3个条件满足且斜率达到严重程度
+			log.Printf("InstId: %v, Severe negative trend detected: %v, warningLevel: %v", instID, slope, warningLevel)
+		} else {
+			warningLevel = "moderate" //中：3个条件满足但斜率未达到严重程度
+		}
+	}
+
+	return &LiquidityShrinkData{
+		Warning:      warning,
+		WarningLevel: warningLevel,
+		Liquidity:    currentMetrics.Liquidity,
+		Spread:       currentMetrics.Spread,
+		Depth:        currentMetrics.Depth,
+		Slope:        slope,
+		Timestamp:    currentTime,
+	}, nil
+}
+
+// ToRedisMap converts LiquidityShrinkData to a map for Redis storage
+func (l *LiquidityShrinkData) ToRedisMap() map[string]interface{} {
+	return map[string]interface{}{
+		"warning":       l.Warning,
+		"warning_level": l.WarningLevel,
+		"liquidity":     l.Liquidity,
+		"spread":        l.Spread,
+		"depth":         l.Depth,
+		"slope":         l.Slope,
+		"timestamp":     l.Timestamp,
+	}
 }

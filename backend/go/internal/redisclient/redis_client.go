@@ -127,6 +127,44 @@ func (c *Client) StoreSupportResistance(instID string, supports, resistances []f
 	return nil
 }
 
+// StoreDepthAnomaly stores depth anomaly detection results for an instrument in Redis Hash
+func (c *Client) StoreDepthAnomaly(instID string, anomalyData map[string]interface{}) error {
+	hashKey := fmt.Sprintf(config.DepthAnomalyKey, instID)
+
+	// Add instrument ID and timestamp to the data
+	fields := make(map[string]interface{})
+	for k, v := range anomalyData {
+		fields[k] = v
+	}
+	fields["instrument_id"] = instID
+	fields["timestamp"] = time.Now().Unix()
+
+	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to store depth anomaly data: %w", err)
+	}
+
+	return nil
+}
+
+// StoreLiquidityShrink stores liquidity shrinkage warning results for an instrument in Redis Hash
+func (c *Client) StoreLiquidityShrink(instID string, shrinkData map[string]interface{}) error {
+	hashKey := fmt.Sprintf(config.LiquidityShrinkKey, instID)
+
+	// Add instrument ID and timestamp to the data
+	fields := make(map[string]interface{})
+	for k, v := range shrinkData {
+		fields[k] = v
+	}
+	fields["instrument_id"] = instID
+	fields["timestamp"] = time.Now().Unix()
+
+	if err := c.rdb.HSet(c.ctx, hashKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to store liquidity shrinkage data: %w", err)
+	}
+
+	return nil
+}
+
 // GetHash returns all fields of a Redis hash as a map
 func (c *Client) GetHash(key string) (map[string]string, error) {
 	result, err := c.rdb.HGetAll(c.ctx, key).Result()

@@ -81,7 +81,7 @@ func main() {
 				}
 
 				// Compute support/resistance levels using in-memory order book and store in Redis
-				supports, resistances, err := obManager.ComputeSupportResistance(instID, 80, 1.5, 2)
+				supports, resistances, err := obManager.ComputeSupportResistance(instID, cfg.Analysis.SupportResistanceBinCount, cfg.Analysis.SupportResistanceSignificanceThreshold, cfg.Analysis.SupportResistanceTopN, cfg.Analysis.SupportResistanceMinDistancePercent)
 				if err != nil {
 					log.Printf("Failed to compute support/resistance for %s: %v", instID, err)
 					continue
@@ -148,7 +148,7 @@ func main() {
 						- -0.3 ≤ sentiment < -0.1 ：温和看跌信号
 						- sentiment < -0.3 ：强烈看跌信号
 				*/
-				largeBuy, largeSell, sentiment, err := obManager.ComputeLargeOrderDistribution(instID, 0.97, 3.0, 0.3)
+				largeBuy, largeSell, sentiment, err := obManager.ComputeLargeOrderDistribution(instID, cfg.Analysis.LargeOrderPercentileAlpha, cfg.Analysis.LargeOrderDecayLambda, cfg.Analysis.LargeOrderSentimentDeadzoneThreshold)
 				if err != nil {
 					log.Printf("Failed to compute large order distribution for %s: %v", instID, err)
 					continue
@@ -177,6 +177,54 @@ func main() {
 
 				if err := redisClient.HashSave(hashKey, fields); err != nil {
 					log.Printf("Failed to store large order distribution for %s: %v", instID, err)
+				}
+
+				// Compute depth anomaly detection and store in Redis
+				// 计算订单簿深度异常检测结果并存储到Redis
+				depthAnomaly, err := obManager.DetectDepthAnomaly(instID, cfg.Analysis.DepthAnomalyPriceRangePercent, cfg.Analysis.DepthAnomalyWindowSize, cfg.Analysis.DepthAnomalyZThreshold)
+				if err != nil {
+					log.Printf("Failed to detect depth anomaly for %s: %v", instID, err)
+				} else {
+					if depthAnomaly.Anomaly {
+						log.Printf("%sDepth Anomaly Detected for %s: Z-Score=%.4f, Direction=%s, Intensity=%.4f%s",
+							config.Red, instID, depthAnomaly.ZScore, depthAnomaly.Direction, depthAnomaly.Intensity, config.Reset)
+					}
+
+					// Store depth anomaly in Redis
+					if err := redisClient.StoreDepthAnomaly(instID, depthAnomaly.ToRedisMap()); err != nil {
+						log.Printf("Failed to store depth anomaly for %s: %v", instID, err)
+					}
+				}
+
+				// Compute liquidity shrinkage warning and store in Redis
+				// 计算流动性收缩警告并存储到Redis
+				liquidityShrink, err := obManager.DetectLiquidityShrinkage(instID, cfg.Analysis.LiquidityShrinkNearPriceDeltaPercent, cfg.Analysis.LiquidityShrinkShortWindowSeconds, cfg.Analysis.LiquidityShrinkLongWindowSeconds, cfg.Analysis.LiquidityShrinkSlopeThreshold)
+				if err != nil {
+					log.Printf("Failed to detect liquidity shrinkage for %s: %v", instID, err)
+				} else {
+					if liquidityShrink.Warning {
+						var warningColor string
+						switch liquidityShrink.WarningLevel {
+						case "light":
+							warningColor = config.Yellow
+						case "moderate":
+							warningColor = config.Red
+						case "severe":
+							warningColor = config.Red
+						default:
+							warningColor = config.Reset
+						}
+
+						if warningColor == config.Red {
+							log.Printf("%sLiquidity Shrinkage Warning for %s: Level=%s, Liquidity=%.4f, Slope=%.6f%s",
+								warningColor, instID, liquidityShrink.WarningLevel, liquidityShrink.Liquidity, liquidityShrink.Slope, config.Reset)
+						}
+					}
+
+					// Store liquidity shrinkage in Redis
+					if err := redisClient.StoreLiquidityShrink(instID, liquidityShrink.ToRedisMap()); err != nil {
+						log.Printf("Failed to store liquidity shrinkage for %s: %v", instID, err)
+					}
 				}
 			}
 		}

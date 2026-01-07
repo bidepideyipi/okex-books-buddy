@@ -56,3 +56,59 @@ type PriceLevelWithTimeItem struct {
 	Value     float64
 	Timestamp int64
 }
+
+// DepthAnomalyData represents the depth anomaly detection result
+type DepthAnomalyData struct {
+	Anomaly   bool    `json:"anomaly"`
+	ZScore    float64 `json:"z_score"`
+	Depth     float64 `json:"depth"`
+	Mean      float64 `json:"mean"`
+	StdDev    float64 `json:"std_dev"`
+	Timestamp int64   `json:"timestamp"`
+	Direction string  `json:"direction"` // "increase" or "decrease"
+	Intensity float64 `json:"intensity"`
+}
+
+// DepthWindowItem represents an item in the depth sliding window
+type DepthWindowItem struct {
+	Depth     float64
+	Timestamp int64
+}
+
+// SupportResistanceData represents support and resistance levels
+type SupportResistanceData struct {
+	Supports    []float64 `json:"supports"`
+	Resistances []float64 `json:"resistances"`
+	Timestamp   int64     `json:"timestamp"`
+}
+
+// SupportResistanceWindowItem represents an item in the support/resistance sliding window
+type SupportResistanceWindowItem struct {
+	Data      SupportResistanceData
+	Timestamp int64
+}
+
+// LiquidityMetrics represents the liquidity metrics at a point in time
+type LiquidityMetrics struct {
+	Spread    float64 `json:"spread"`
+	Depth     float64 `json:"depth"`
+	Liquidity float64 `json:"liquidity"`
+	Timestamp int64   `json:"timestamp"`
+}
+
+// LiquidityShrinkData represents the liquidity shrinkage warning result
+type LiquidityShrinkData struct {
+	Warning      bool    `json:"warning"`
+	WarningLevel string  `json:"warning_level"` // "none", "light", "moderate", "severe"
+	Liquidity    float64 `json:"liquidity"`
+	Spread       float64 `json:"spread"`
+	Depth        float64 `json:"depth"`
+	Slope        float64 `json:"slope"`
+	Timestamp    int64   `json:"timestamp"`
+}
+
+// LiquidityWindowItem represents an item in the liquidity sliding window
+type LiquidityWindowItem struct {
+	Metrics   LiquidityMetrics
+	Timestamp int64
+}
