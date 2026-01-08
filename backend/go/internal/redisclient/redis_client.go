@@ -60,9 +60,29 @@ func (c *Client) PublishOrderBookEvent(listKey string, event interface{}) error 
 	return nil
 }
 
+func (c *Client) StoreTickerSnapshot(instID string, ticker interface{}) error {
+	hashKey := fmt.Sprintf(config.TickerKey, instID)
+
+	// Convert ticker to map for Redis HSET
+	tickerBytes, err := json.Marshal(ticker)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ticker: %w", err)
+	}
+
+	var tickerMap map[string]interface{}
+	if err := json.Unmarshal(tickerBytes, &tickerMap); err != nil {
+		return fmt.Errorf("failed to unmarshal ticker to map: %w", err)
+	}
+
+	if err := c.rdb.HSet(c.ctx, hashKey, tickerMap).Err(); err != nil {
+		return fmt.Errorf("failed to store ticker snapshot: %w", err)
+	}
+	return nil
+}
+
 // StoreOrderBookSnapshot stores the latest order book snapshot in Redis Hash
 func (c *Client) StoreOrderBookSnapshot(instID string, asks, bids interface{}, checksum int32) error {
-	hashKey := fmt.Sprintf("orderbook:%s", instID)
+	hashKey := fmt.Sprintf(config.OrderBookKey, instID)
 
 	asksJSON, err := json.Marshal(asks)
 	if err != nil {

@@ -19,11 +19,18 @@ const (
 
 // RedisKey
 const (
-	TradingPairsKey      = "config:trading_pairs"  //运行时会去订阅的交易对
+	TradingPairsKey      = "config:trading_pairs" //运行时会去订阅的交易对
+	OrderBookKey         = "orderbook:%s"
+	TickerKey            = "ticker:%s"
 	SupportResistanceKey = "analysis:supp_resi:%s" //支撑位和阻力位
 	SentimentKey         = "analysis:sentiment:%s" //多空情绪
 	DepthAnomalyKey      = "analysis:dept_anom:%s" //深度异常波动
 	LiquidityShrinkKey   = "analysis:liqu_shri:%s" //流动性萎缩预警
+)
+
+const (
+	BooksChannel  = "books"   //订单薄频道
+	TickerChannel = "tickers" //行情频道
 )
 
 // RedisConfig holds Redis connection settings.

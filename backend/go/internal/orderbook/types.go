@@ -24,10 +24,30 @@ type PriceLevel struct {
 type OKExMessage struct {
 	Event  string          `json:"event"`
 	Arg    json.RawMessage `json:"arg"`
-	Data   []BookData      `json:"data"`
+	Data   json.RawMessage `json:"data"` // Raw data - will be parsed based on channel type
 	Code   string          `json:"code"`
 	Msg    string          `json:"msg"`
 	Action string          `json:"action"`
+}
+
+// TickerData represents the ticker data structure
+type TickerData struct {
+	InstType  string `json:"instType"`
+	InstID    string `json:"instId"`
+	Last      string `json:"last"`
+	LastSz    string `json:"lastSz"`
+	AskPx     string `json:"askPx"`
+	AskSz     string `json:"askSz"`
+	BidPx     string `json:"bidPx"`
+	BidSz     string `json:"bidSz"`
+	Open24h   string `json:"open24h"`
+	High24h   string `json:"high24h"`
+	Low24h    string `json:"low24h"`
+	VolCcy24h string `json:"volCcy24h"`
+	Vol24h    string `json:"vol24h"`
+	SodUtc0   string `json:"sodUtc0"`
+	SodUtc8   string `json:"sodUtc8"`
+	Timestamp string `json:"ts"`
 }
 
 // ArgData represents the arg field structure

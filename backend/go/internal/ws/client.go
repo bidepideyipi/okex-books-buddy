@@ -164,7 +164,7 @@ func (c *Client) reconnect() {
 	log.Printf("Failed to reconnect after %d attempts", c.maxReconnect)
 }
 
-// Subscribe subscribes to order book data for a trading pair
+// Subscribe subscribes to both order book and ticker data for trading pairs
 func (c *Client) Subscribe(instruments []string) error {
 	c.mu.RLock()
 	conn := c.conn
@@ -174,11 +174,20 @@ func (c *Client) Subscribe(instruments []string) error {
 		return fmt.Errorf("websocket not connected")
 	}
 
-	// Build subscription message according to OKEx API
-	args := make([]map[string]string, 0, len(instruments))
+	// Build subscription message for both channels according to OKEx API
+	args := make([]map[string]string, 0, len(instruments)*2)
+
+	// Subscribe to both channels for each instrument
 	for _, inst := range instruments {
+		// Subscribe to books channel (order book data)
 		args = append(args, map[string]string{
 			"channel": "books",
+			"instId":  inst,
+		})
+
+		// Subscribe to tickers channel (market data)
+		args = append(args, map[string]string{
+			"channel": "tickers",
 			"instId":  inst,
 		})
 	}
@@ -208,11 +217,11 @@ func (c *Client) Subscribe(instruments []string) error {
 	}
 	c.subscribedMu.Unlock()
 
-	log.Printf("Subscribed to instruments: %v", instruments)
+	log.Printf("Subscribed to instruments: %v (both books and tickers channels)", instruments)
 	return nil
 }
 
-// Unsubscribe unsubscribes from order book data
+// Unsubscribe unsubscribes from both order book and ticker data
 func (c *Client) Unsubscribe(instruments []string) error {
 	c.mu.RLock()
 	conn := c.conn
@@ -222,11 +231,20 @@ func (c *Client) Unsubscribe(instruments []string) error {
 		return fmt.Errorf("websocket not connected")
 	}
 
-	// Build unsubscription message
-	args := make([]map[string]string, 0, len(instruments))
+	// Build unsubscription message for both channels
+	args := make([]map[string]string, 0, len(instruments)*2)
+
+	// Unsubscribe from both channels for each instrument
 	for _, inst := range instruments {
+		// Unsubscribe from books channel
 		args = append(args, map[string]string{
 			"channel": "books",
+			"instId":  inst,
+		})
+
+		// Unsubscribe from tickers channel
+		args = append(args, map[string]string{
+			"channel": "tickers",
 			"instId":  inst,
 		})
 	}
@@ -256,7 +274,7 @@ func (c *Client) Unsubscribe(instruments []string) error {
 	}
 	c.subscribedMu.Unlock()
 
-	log.Printf("Unsubscribed from instruments: %v", instruments)
+	log.Printf("Unsubscribed from instruments: %v (both books and tickers channels)", instruments)
 	return nil
 }
 

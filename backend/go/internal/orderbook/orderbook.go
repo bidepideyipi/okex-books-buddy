@@ -15,6 +15,7 @@ import (
 // Manager manages order books for multiple instruments
 type Manager struct {
 	books                    map[string]*OrderBook               // instrument_id -> order book
+	tickers                  map[string]*TickerData              // instrument_id -> ticker data
 	sentimentMap             map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of sentiment values
 	depthWindows             map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of depth values
 	liquidityWindows         map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of liquidity metrics
@@ -26,6 +27,7 @@ type Manager struct {
 func NewManager() *Manager {
 	return &Manager{
 		books:                    make(map[string]*OrderBook),
+		tickers:                  make(map[string]*TickerData),
 		sentimentMap:             make(map[string]*utils.GenericTimeWindow),
 		depthWindows:             make(map[string]*utils.GenericTimeWindow),
 		liquidityWindows:         make(map[string]*utils.GenericTimeWindow),
@@ -34,7 +36,7 @@ func NewManager() *Manager {
 	}
 }
 
-// ProcessMessage processes incoming WebSocket messages
+// ProcessMessage processes incoming WebSocket messages for both books and tickers channels
 func (m *Manager) ProcessMessage(msg []byte) error {
 	var okexMsg OKExMessage
 	if err := json.Unmarshal(msg, &okexMsg); err != nil {
@@ -43,12 +45,12 @@ func (m *Manager) ProcessMessage(msg []byte) error {
 
 	// Handle subscription confirmation
 	if okexMsg.Event == "subscribe" {
-		// Extract instID from arg field for logging
+		// Extract channel and instID from arg field for logging
 		var arg ArgData
 		if err := json.Unmarshal(okexMsg.Arg, &arg); err == nil {
-			log.Printf("Subscription confirmed: %s", arg.InstID)
+			log.Printf("Subscription confirmed: %s channel for %s", arg.Channel, arg.InstID)
 		} else {
-			log.Printf("Subscription confirmed (failed to parse instID)")
+			log.Printf("Subscription confirmed (failed to parse arg field)")
 		}
 		return nil
 	}
@@ -58,20 +60,40 @@ func (m *Manager) ProcessMessage(msg []byte) error {
 		return fmt.Errorf("OKEx error: code=%s, msg=%s", okexMsg.Code, okexMsg.Msg)
 	}
 
-	// Process order book data
-	if len(okexMsg.Data) == 0 {
-		return nil // No data to process
-	}
-
-	// Extract instID from arg field
+	// Extract channel and instID from arg field
 	var arg ArgData
 	if err := json.Unmarshal(okexMsg.Arg, &arg); err != nil {
 		log.Printf("WARNING: Failed to parse arg field: %v", err)
 		return nil
 	}
 
+	// Route message based on channel type
+	switch arg.Channel {
+	case "books":
+		return m.processBooksMessage(okexMsg, arg)
+	case "tickers":
+		return m.processTickersMessage(okexMsg, arg)
+	default:
+		log.Printf("WARNING: Unknown channel type: %s", arg.Channel)
+		return nil
+	}
+}
+
+// processBooksMessage handles order book data messages
+func (m *Manager) processBooksMessage(okexMsg OKExMessage, arg ArgData) error {
+	// Process order book data
+	if len(okexMsg.Data) == 0 {
+		return nil // No data to process
+	}
+
+	// Parse book data from raw JSON
+	var bookDatas []BookData
+	if err := json.Unmarshal(okexMsg.Data, &bookDatas); err != nil {
+		return fmt.Errorf("failed to unmarshal book data: %w", err)
+	}
+
 	// Process each data item with the instID from arg
-	for _, data := range okexMsg.Data {
+	for _, data := range bookDatas {
 		// Use instID from arg field (this is where OKX puts it)
 		data.InstID = arg.InstID
 
@@ -80,6 +102,46 @@ func (m *Manager) ProcessMessage(msg []byte) error {
 		}
 	}
 
+	return nil
+}
+
+// processTickersMessage handles ticker data messages
+func (m *Manager) processTickersMessage(okexMsg OKExMessage, arg ArgData) error {
+	// Process ticker data
+	if len(okexMsg.Data) == 0 {
+		return nil // No data to process
+	}
+
+	// Parse ticker data from raw JSON
+	var tickerDatas []TickerData
+	if err := json.Unmarshal(okexMsg.Data, &tickerDatas); err != nil {
+		return fmt.Errorf("failed to unmarshal ticker data: %w", err)
+	}
+
+	// Process each ticker data item
+	for _, tickerData := range tickerDatas {
+		// Ensure instId matches the one from arg (should be the same)
+		if tickerData.InstID != arg.InstID {
+			log.Printf("WARNING: instId mismatch in ticker data: arg=%s, data=%s", arg.InstID, tickerData.InstID)
+		}
+
+		// Store ticker data in Redis for quick access
+		if err := m.storeTickerData(tickerData); err != nil {
+			log.Printf("WARNING: failed to store ticker data for %s: %v", tickerData.InstID, err)
+		}
+
+		// Log important price information
+		// log.Printf("Ticker Update - %s: Last=%s, Bid=%s(%s), Ask=%s(%s), 24hHigh=%s, 24hLow=%s, 24hVol=%s",
+		// 	tickerData.InstID, tickerData.Last, tickerData.BidPx, tickerData.BidSz,
+		// 	tickerData.AskPx, tickerData.AskSz, tickerData.High24h, tickerData.Low24h, tickerData.Vol24h)
+	}
+
+	return nil
+}
+
+// storeTickerData stores ticker data in Redis for quick access
+func (m *Manager) storeTickerData(tickerData TickerData) error {
+	m.tickers[tickerData.InstID] = &tickerData
 	return nil
 }
 
@@ -322,6 +384,11 @@ func min(a, b int) int {
 func (m *Manager) GetOrderBook(instID string) (*OrderBook, bool) {
 	book, exists := m.books[instID]
 	return book, exists
+}
+
+func (m *Manager) GetTicker(instID string) (*TickerData, bool) {
+	ticker, exists := m.tickers[instID]
+	return ticker, exists
 }
 
 // GetTop400 returns the top 400 levels of asks and bids
