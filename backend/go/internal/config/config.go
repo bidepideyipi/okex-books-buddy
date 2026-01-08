@@ -119,7 +119,6 @@ func LoadFromEnv() AppConfig {
 			SupportResistanceTopN:                  getenvIntWithDefault("SUPPORT_RESISTANCE_TOP_N", 2),
 			SupportResistanceMinDistancePercent:    getenvFloat64WithDefault("SUPPORT_RESISTANCE_MIN_DISTANCE_PERCENT", 0.5),
 
-
 			// ComputeLargeOrderDistribution
 			LargeOrderPercentileAlpha:            getenvFloat64WithDefault("LARGE_ORDER_PERCENTILE_ALPHA", 0.95),
 			LargeOrderDecayLambda:                getenvFloat64WithDefault("LARGE_ORDER_DECAY_LAMBDA", 5.0),

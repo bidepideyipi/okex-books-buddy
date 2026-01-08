@@ -203,7 +203,7 @@ func main() {
 				if err != nil {
 					log.Printf("Failed to detect depth anomaly for %s: %v", instID, err)
 				} else {
-					if depthAnomaly.Anomaly && depthAnomaly.Intensity > 3 {
+					if depthAnomaly.Anomaly && depthAnomaly.Intensity > 2.5 {
 						log.Printf("%sDepth Anomaly Detected for %s: Z-Score=%.4f, Direction=%s, Intensity=%.4f%s",
 							config.Green, instID, depthAnomaly.ZScore, depthAnomaly.Direction, depthAnomaly.Intensity, config.Reset)
 					}
