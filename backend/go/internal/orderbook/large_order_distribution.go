@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/supermancell/okex-buddy/internal/utils"
 )
 
 // ComputeLargeOrderDistribution computes large order distribution and sentiment
@@ -141,28 +143,27 @@ func (m *Manager) ComputeLargeOrderDistribution(instID string, percentileAlpha f
 	}
 
 	// Apply sliding window smoothing to sentiment values (30-second window)
-	currentTime := time.Now().Unix()
-	windowDuration := int64(30) // 30 seconds
-
-	// Add current sentiment to the sliding window
-	m.sentimentMap[instID] = append(m.sentimentMap[instID], PriceLevelWithTimeItem{Value: transformedSentiment, Timestamp: currentTime})
-
-	// Remove old entries outside the 30-second window
-	newWindow := []PriceLevelWithTimeItem{}
-	for _, entry := range m.sentimentMap[instID] {
-		if currentTime-entry.Timestamp <= windowDuration {
-			newWindow = append(newWindow, entry)
-		}
+	if m.sentimentMap[instID] == nil {
+		m.sentimentMap[instID] = utils.NewGenericTimeWindow(30) // 30 seconds
 	}
-	m.sentimentMap[instID] = newWindow
+
+	// Add current sentiment to the time window
+	sentimentItem := &PriceLevelWithTimeItem{
+		Value:     transformedSentiment,
+		Timestamp: time.Now().Unix(),
+	}
+	m.sentimentMap[instID].Add(sentimentItem)
 
 	// Calculate smoothed sentiment as average of values in the window
-	if len(m.sentimentMap[instID]) > 0 {
+	windowItems := m.sentimentMap[instID].GetItems()
+	if len(windowItems) > 0 {
 		var sum float64
-		for _, entry := range m.sentimentMap[instID] {
-			sum += entry.Value
+		for _, item := range windowItems {
+			if sentimentItem, ok := item.(*PriceLevelWithTimeItem); ok {
+				sum += sentimentItem.Value
+			}
 		}
-		sentiment = sum / float64(len(m.sentimentMap[instID]))
+		sentiment = sum / float64(len(windowItems))
 	} else {
 		sentiment = transformedSentiment
 	}

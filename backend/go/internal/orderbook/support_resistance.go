@@ -199,8 +199,6 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 		}
 	}
 
-	// Add current result to sliding window for historical tracking
-	currentTime := time.Now().Unix()
 	// Calculate spread as the distance between highest support and lowest resistance
 	if len(supports) > 0 && len(resistances) > 0 {
 		maxSupport := supports[0]
@@ -225,45 +223,35 @@ func (m *Manager) ComputeSupportResistance(instID string, binCount int, signific
 		spread = 0 // No valid support/resistance pair to calculate spread
 	}
 
-	// Add current result to sliding window for historical tracking
-	m.supportResistanceWindows[instID] = append(m.supportResistanceWindows[instID], SupportResistanceWindowItem{
+	// Use time window utility for support/resistance data (30 minutes window)
+	const maxWindowSeconds = 1800 // 30 minutes
+	if m.supportResistanceWindows[instID] == nil {
+		m.supportResistanceWindows[instID] = utils.NewGenericTimeWindow(maxWindowSeconds)
+	}
+
+	// Add current result to the time window
+	srItem := &SupportResistanceWindowItem{
 		Data: SupportResistanceData{
 			Supports:    supports,
 			Resistances: resistances,
 			Spread:      spread,
-			Timestamp:   currentTime,
+			Timestamp:   time.Now().Unix(),
 		},
-		Timestamp: currentTime,
-	})
-
-	// Keep only the most recent entries within a time window (e.g., 30 minutes)
-	const maxWindowSeconds = 1800 // 30 minutes
-	cutoffTime := currentTime - maxWindowSeconds
-	startIndex := 0
-	for i, item := range m.supportResistanceWindows[instID] {
-		if item.Timestamp > cutoffTime {
-			startIndex = i
-			break
-		}
+		Timestamp: time.Now().Unix(),
 	}
-	m.supportResistanceWindows[instID] = m.supportResistanceWindows[instID][startIndex:]
+	m.supportResistanceWindows[instID].Add(srItem)
 
-	// Add current spread to sliding window for historical tracking
-	m.spreadWindows[instID] = append(m.spreadWindows[instID], SpreadWindowItem{
+	// Use time window utility for spread data (30 minutes window)
+	if m.spreadWindows[instID] == nil {
+		m.spreadWindows[instID] = utils.NewGenericTimeWindow(maxWindowSeconds)
+	}
+
+	// Add current spread to the time window
+	spreadItem := &SpreadWindowItem{
 		Spread:    spread,
-		Timestamp: currentTime,
-	})
-
-	// Keep only the most recent entries within a time window (e.g., 30 minutes)
-	cutoffTime = currentTime - maxWindowSeconds
-	startIndex = 0
-	for i, item := range m.spreadWindows[instID] {
-		if item.Timestamp > cutoffTime {
-			startIndex = i
-			break
-		}
+		Timestamp: time.Now().Unix(),
 	}
-	m.spreadWindows[instID] = m.spreadWindows[instID][startIndex:]
+	m.spreadWindows[instID].Add(spreadItem)
 
 	//log.Printf("Computed support and resistance levels for %s: supports=%v, resistances=%v", instID, supports, resistances)
 	return supports, resistances, spread, nil
@@ -276,8 +264,14 @@ func (m *Manager) AnalyzeSpreadZScore(instID string, windowSizeMinutes int) (zSc
 		windowSizeMinutes = 5 // default to 5 minutes
 	}
 
-	spreads := m.spreadWindows[instID]
-	if len(spreads) < 2 {
+	// Get window items
+	window := m.spreadWindows[instID]
+	if window == nil {
+		return 0, 0, fmt.Errorf("no spread window for %s", instID)
+	}
+
+	items := window.GetItems()
+	if len(items) < 2 {
 		return 0, 0, fmt.Errorf("insufficient spread data for %s", instID)
 	}
 
@@ -287,16 +281,27 @@ func (m *Manager) AnalyzeSpreadZScore(instID string, windowSizeMinutes int) (zSc
 
 	// Collect spreads within the time window
 	var windowSpreads []float64
-	for _, item := range spreads {
-		if item.Timestamp >= cutoffTime {
-			windowSpreads = append(windowSpreads, item.Spread)
+	var currentSpreadItem *SpreadWindowItem
+
+	for _, item := range items {
+		if spreadItem, ok := item.(*SpreadWindowItem); ok {
+			if spreadItem.Timestamp >= cutoffTime {
+				windowSpreads = append(windowSpreads, spreadItem.Spread)
+			}
+			// Keep track of the most recent item
+			if currentSpreadItem == nil || spreadItem.Timestamp > currentSpreadItem.Timestamp {
+				currentSpreadItem = spreadItem
+			}
 		}
 	}
 
 	// If not enough data in the time window, use all available data
 	if len(windowSpreads) < 2 {
-		for _, item := range spreads {
-			windowSpreads = append(windowSpreads, item.Spread)
+		windowSpreads = windowSpreads[:0] // Clear the slice
+		for _, item := range items {
+			if spreadItem, ok := item.(*SpreadWindowItem); ok {
+				windowSpreads = append(windowSpreads, spreadItem.Spread)
+			}
 		}
 	}
 
@@ -305,7 +310,11 @@ func (m *Manager) AnalyzeSpreadZScore(instID string, windowSizeMinutes int) (zSc
 	}
 
 	// Get the current spread
-	currentSpread = spreads[len(spreads)-1].Spread
+	if currentSpreadItem != nil {
+		currentSpread = currentSpreadItem.Spread
+	} else {
+		return 0, 0, fmt.Errorf("could not find current spread for %s", instID)
+	}
 
 	// Calculate Z-score using utility function
 	zScore = utils.CalculateZScore(currentSpread, windowSpreads)

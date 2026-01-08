@@ -101,8 +101,8 @@ func main() {
 						if zScore < 0 {
 							trend = "contracted"
 						}
-						log.Printf("\033[33mSpread %s significantly (Z-Score=%.4f) for %s: current spread: %.6f\033[0m",
-							trend, zScore, instID, currentSpread)
+						log.Printf("\033[33mSupport Resistance Spread %s for: %s, significantly Z-Score=%.4f, current spread: %.6f\033[0m",
+							trend, instID, zScore, currentSpread)
 					}
 					if err := redisClient.StoreSpreadZScore(instID, zScore, currentSpread); err != nil {
 						log.Printf("Failed to store spread Z-score for %s: %v", instID, err)

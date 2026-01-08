@@ -26,38 +26,41 @@ func (m *Manager) DetectDepthAnomaly(instID string, priceRangePercent float64, w
 		zThreshold = 2.0 // Default to 2.0 standard deviations
 	}
 
-	currentTime := time.Now().Unix()
-
-	// Add current depth to the sliding window
-	m.depthWindows[instID] = append(m.depthWindows[instID], DepthWindowItem{
-		Depth:     currentDepth,
-		Timestamp: currentTime,
-	})
-
-	// Keep only the most recent windowSize entries
-	if len(m.depthWindows[instID]) > windowSize {
-		startIndex := len(m.depthWindows[instID]) - windowSize
-		m.depthWindows[instID] = m.depthWindows[instID][startIndex:]
+	// Use time window utility for automatic expiration management
+	if m.depthWindows[instID] == nil {
+		m.depthWindows[instID] = utils.NewGenericTimeWindow(int64(windowSize))
 	}
 
-	// If we don't have enough data points yet, return normal state
-	if len(m.depthWindows[instID]) < 2 {
+	// Add current depth to the time window
+	depthItem := &DepthWindowItem{
+		Depth:     currentDepth,
+		Timestamp: time.Now().Unix(),
+	}
+	m.depthWindows[instID].Add(depthItem)
+
+	// Get current items from window
+	windowItems := m.depthWindows[instID].GetItems()
+	if len(windowItems) < 2 {
 		return &DepthAnomalyData{
 			Anomaly:   false,
 			ZScore:    0,
 			Depth:     currentDepth,
 			Mean:      currentDepth,
 			StdDev:    0,
-			Timestamp: currentTime,
+			Timestamp: time.Now().Unix(),
 			Direction: "", // Not enough data to determine direction
 			Intensity: 0,
 		}, nil
 	}
 
 	// Get historical depths (excluding current value)
-	historicalDepths := make([]float64, 0, len(m.depthWindows[instID])-1)
-	for _, item := range m.depthWindows[instID][:len(m.depthWindows[instID])-1] {
-		historicalDepths = append(historicalDepths, item.Depth)
+	historicalDepths := make([]float64, 0, len(windowItems)-1)
+	for i, item := range windowItems {
+		if i < len(windowItems)-1 { // Exclude the last (current) item
+			if depthItem, ok := item.(*DepthWindowItem); ok {
+				historicalDepths = append(historicalDepths, depthItem.Depth)
+			}
+		}
 	}
 
 	// Calculate statistics using utility functions
@@ -89,7 +92,7 @@ func (m *Manager) DetectDepthAnomaly(instID string, priceRangePercent float64, w
 		Depth:     currentDepth,
 		Mean:      historicalMean,
 		StdDev:    stdDev,
-		Timestamp: currentTime,
+		Timestamp: time.Now().Unix(),
 		Direction: direction,
 		Intensity: intensity,
 	}

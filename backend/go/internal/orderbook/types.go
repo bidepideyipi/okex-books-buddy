@@ -142,3 +142,24 @@ type SpreadWindowItem struct {
 	Spread    float64
 	Timestamp int64
 }
+
+// Implement TimeWindowItem interface for all window items
+func (i *PriceLevelWithTimeItem) GetTimestamp() int64 {
+	return i.Timestamp
+}
+
+func (i *DepthWindowItem) GetTimestamp() int64 {
+	return i.Timestamp
+}
+
+func (i *SupportResistanceWindowItem) GetTimestamp() int64 {
+	return i.Timestamp
+}
+
+func (i *LiquidityWindowItem) GetTimestamp() int64 {
+	return i.Timestamp
+}
+
+func (i *SpreadWindowItem) GetTimestamp() int64 {
+	return i.Timestamp
+}

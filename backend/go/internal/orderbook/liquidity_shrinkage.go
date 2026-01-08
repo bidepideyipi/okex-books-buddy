@@ -42,29 +42,21 @@ func (m *Manager) DetectLiquidityShrinkage(instID string, nearPriceDeltaPercent 
 		nearPriceDeltaPercent = 0.5 // Default to 0.5%
 	}
 
-	currentTime := time.Now().Unix()
-
-	// Add current metrics to the sliding window
-	// 添加当前指标到滑动窗口
-	m.liquidityWindows[instID] = append(m.liquidityWindows[instID], LiquidityWindowItem{
-		Metrics:   *currentMetrics,
-		Timestamp: currentTime,
-	})
-
-	// Keep only the most recent entries within the long window
-	// 保持滑动窗口内最新的条目，仅保留长期基准比较窗口内的数据
-	cutoffTime := currentTime - int64(longWindowSeconds)
-	startIndex := 0
-	for i, item := range m.liquidityWindows[instID] {
-		if item.Timestamp > cutoffTime {
-			startIndex = i
-			break
-		}
+	// Use time window utility for automatic expiration management
+	if m.liquidityWindows[instID] == nil {
+		m.liquidityWindows[instID] = utils.NewGenericTimeWindow(int64(longWindowSeconds))
 	}
-	m.liquidityWindows[instID] = m.liquidityWindows[instID][startIndex:]
 
-	// If we don't have enough data points yet, return normal state
-	if len(m.liquidityWindows[instID]) < 2 {
+	// Add current metrics to the time window
+	liquidityItem := &LiquidityWindowItem{
+		Metrics:   *currentMetrics,
+		Timestamp: time.Now().Unix(),
+	}
+	m.liquidityWindows[instID].Add(liquidityItem)
+
+	// Get current items from window
+	windowItems := m.liquidityWindows[instID].GetItems()
+	if len(windowItems) < 2 {
 		return &LiquidityShrinkData{
 			Warning:      false,
 			WarningLevel: "none",
@@ -72,23 +64,31 @@ func (m *Manager) DetectLiquidityShrinkage(instID string, nearPriceDeltaPercent 
 			Spread:       currentMetrics.Spread,
 			Depth:        currentMetrics.Depth,
 			Slope:        0,
-			Timestamp:    currentTime,
+			Timestamp:    time.Now().Unix(),
 		}, nil
 	}
 
-	// Separate data for short-term trend analysis and long-term percentiles
-	// 分离短期趋势分析数据和长期基准比较数据
-	shortWindowStart := currentTime - int64(shortWindowSeconds)
-	var shortWindowItems []LiquidityWindowItem
+	// Convert window items to typed items for processing
+	typedItems := make([]LiquidityWindowItem, len(windowItems))
 	var longWindowLiquidity []float64
 	var longWindowSpread []float64
 
-	for _, item := range m.liquidityWindows[instID] {
+	for i, item := range windowItems {
+		if typedItem, ok := item.(*LiquidityWindowItem); ok {
+			typedItems[i] = *typedItem
+			longWindowLiquidity = append(longWindowLiquidity, typedItem.Metrics.Liquidity)
+			longWindowSpread = append(longWindowSpread, typedItem.Metrics.Spread)
+		}
+	}
+
+	// Separate data for short-term trend analysis
+	shortWindowStart := time.Now().Unix() - int64(shortWindowSeconds)
+	var shortWindowItems []LiquidityWindowItem
+
+	for _, item := range typedItems {
 		if item.Timestamp >= shortWindowStart {
 			shortWindowItems = append(shortWindowItems, item)
 		}
-		longWindowLiquidity = append(longWindowLiquidity, item.Metrics.Liquidity)
-		longWindowSpread = append(longWindowSpread, item.Metrics.Spread)
 	}
 
 	// Calculate slope for short-term trend
@@ -139,7 +139,7 @@ func (m *Manager) DetectLiquidityShrinkage(instID string, nearPriceDeltaPercent 
 		Spread:       currentMetrics.Spread,
 		Depth:        currentMetrics.Depth,
 		Slope:        slope,
-		Timestamp:    currentTime,
+		Timestamp:    time.Now().Unix(),
 	}, nil
 }
 

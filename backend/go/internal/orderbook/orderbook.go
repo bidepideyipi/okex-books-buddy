@@ -8,27 +8,29 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/supermancell/okex-buddy/internal/utils"
 )
 
 // Manager manages order books for multiple instruments
 type Manager struct {
-	books                    map[string]*OrderBook                    // instrument_id -> order book
-	sentimentMap             map[string][]PriceLevelWithTimeItem      // instrument_id -> sliding window of sentiment values
-	depthWindows             map[string][]DepthWindowItem             // instrument_id -> sliding window of depth values
-	liquidityWindows         map[string][]LiquidityWindowItem         // instrument_id -> sliding window of liquidity metrics
-	supportResistanceWindows map[string][]SupportResistanceWindowItem // instrument_id -> sliding window of support/resistance levels
-	spreadWindows            map[string][]SpreadWindowItem            // instrument_id -> sliding window of spread values
+	books                    map[string]*OrderBook               // instrument_id -> order book
+	sentimentMap             map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of sentiment values
+	depthWindows             map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of depth values
+	liquidityWindows         map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of liquidity metrics
+	supportResistanceWindows map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of support/resistance levels
+	spreadWindows            map[string]*utils.GenericTimeWindow // instrument_id -> sliding window of spread values
 }
 
 // NewManager creates a new order book manager
 func NewManager() *Manager {
 	return &Manager{
 		books:                    make(map[string]*OrderBook),
-		sentimentMap:             make(map[string][]PriceLevelWithTimeItem),
-		depthWindows:             make(map[string][]DepthWindowItem),
-		liquidityWindows:         make(map[string][]LiquidityWindowItem),
-		supportResistanceWindows: make(map[string][]SupportResistanceWindowItem),
-		spreadWindows:            make(map[string][]SpreadWindowItem),
+		sentimentMap:             make(map[string]*utils.GenericTimeWindow),
+		depthWindows:             make(map[string]*utils.GenericTimeWindow),
+		liquidityWindows:         make(map[string]*utils.GenericTimeWindow),
+		supportResistanceWindows: make(map[string]*utils.GenericTimeWindow),
+		spreadWindows:            make(map[string]*utils.GenericTimeWindow),
 	}
 }
 
