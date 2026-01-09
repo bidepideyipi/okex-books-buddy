@@ -138,40 +138,8 @@ export $(grep -v '^#' config/app.dev.env | xargs)
 
 ```bash
 cd /Users/anthony/Documents/github/okex-buddy/backend/go
-go run ./cmd/websocket_client
+go run /cmd/main.go
 ```
-
-- **API / monitoring backend service (Go)**
-
-```bash
-cd /Users/anthony/Documents/github/okex-buddy/backend/go
-go run ./cmd/api_server
-```
-
-Both services automatically load configuration from environment variables via the unified `internal/config` module. Make sure you've exported the env vars (step 2) before running.
-
-#### 4. Start analysis flow (Python / Bytewax)
-
-Current skeleton (before wiring Bytewax `Dataflow`) can be run with:
-
-```bash
-cd /Users/anthony/Documents/github/okex-buddy
-python analysis/bytewax/analysis_flow.py
-```
-
-Once the Bytewax flow is implemented, you can also use:
-
-```bash
-cd /Users/anthony/Documents/github/okex-buddy/analysis/bytewax
-bytewax run analysis_flow.py
-```
-
-
-
-#### 5. Process overview in dev
-- **Go WebSocket client**: connects to OKEx WS, processes order book data, writes into Redis.
-- **Python / Bytewax analysis**: consumes buffered data (via Redis List), computes deeper analytics, writes results to Redis.
-- **Go API server**: exposes REST endpoints for current state and metrics.
 
 ## 四大核心算法详解
 
