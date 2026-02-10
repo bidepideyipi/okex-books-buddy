@@ -14,7 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/supermancell/okex-buddy/internal/candlestick"
 	"github.com/supermancell/okex-buddy/internal/config"
+	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
 	"github.com/supermancell/okex-buddy/internal/ws"
@@ -200,6 +202,21 @@ func main() {
 	}()
 	log.Println("Connected to Redis")
 
+	var mongoClient *mongodb.Client
+	if cfg.MongoDB.Addr != "" {
+		mongoClient, err = mongodb.NewClient(cfg.MongoDB.Addr, cfg.MongoDB.Database)
+		if err != nil {
+			log.Printf("Failed to connect to MongoDB: %v", err)
+		} else {
+			defer func() {
+				if err := mongoClient.Close(); err != nil {
+					log.Printf("Failed to close MongoDB client: %v", err)
+				}
+			}()
+			log.Println("Connected to MongoDB")
+		}
+	}
+
 	// Initialize order book manager
 	obManager := orderbook.NewManager()
 
@@ -233,6 +250,44 @@ func main() {
 		wsClient.Close()
 	}()
 	log.Println("Connected to OKEx WebSocket")
+
+	// Initialize Business WebSocket client for candlestick data
+	var businessWsClient *ws.BusinessClient
+	if mongoClient != nil {
+		businessMessageHandler := func(msg []byte) error {
+			candles, err := candlestick.ParseCandlestick(msg)
+			if err != nil {
+				log.Printf("Failed to parse candlestick message: %v", err)
+				return err
+			}
+
+			for _, candle := range candles {
+				if err := mongoClient.InsertCandlestick(&candle); err != nil {
+					log.Printf("Failed to insert candlestick: %v", err)
+				}
+			}
+			return nil
+		}
+
+		if cfg.OKEX.UseProxy {
+			businessWsClient = ws.NewBusinessClientWithProxy(cfg.OKEX.BusinessWSURL, businessMessageHandler, true, cfg.OKEX.ProxyAddr)
+		} else {
+			businessWsClient = ws.NewBusinessClient(cfg.OKEX.BusinessWSURL, businessMessageHandler)
+		}
+
+		if err := businessWsClient.Connect(); err != nil {
+			log.Printf("Failed to connect to OKEx Business WebSocket: %v", err)
+		} else {
+			log.Println("Connected to OKEx Business WebSocket")
+			defer businessWsClient.Close()
+
+			instruments := []string{"ETH-USDT-SWAP"}
+			channels := []string{config.Candle1D, config.Candle4H, config.Candle1H, config.Candle15m}
+			if err := businessWsClient.Subscribe(instruments, channels); err != nil {
+				log.Printf("Failed to subscribe to candlestick channels: %v", err)
+			}
+		}
+	}
 
 	// Create WebSocket hub for API server
 	hub := wshub.NewHub()

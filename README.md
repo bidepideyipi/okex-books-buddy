@@ -1,12 +1,11 @@
-## okex-buddy
+## OKEX-BUDDY
 
 ### Local Development
 
 ### Prerequisites
 
 - Go 1.20+
-- Redis 6.x (running on localhost:6379)
-- Python 3.9+ (for Bytewax, later milestones)
+- Redis 7.x (running on localhost:6379)
 
 
 ### M2 - WebSocket Client Setup

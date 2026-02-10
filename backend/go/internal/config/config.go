@@ -31,6 +31,10 @@ const (
 const (
 	BooksChannel  = "books"   //订单薄频道
 	TickerChannel = "tickers" //行情频道
+	Candle1D      = "candle1D"
+	Candle4H      = "candle4H"
+	Candle1H      = "candle1H"
+	Candle15m     = "candle15m"
 )
 
 // RedisConfig holds Redis connection settings.
@@ -41,20 +45,18 @@ type RedisConfig struct {
 	PollIntervalSec int    // Polling interval for config changes in seconds
 }
 
-// OKEXConfig holds OKEx WebSocket endpoint configuration.
-type OKEXConfig struct {
-	PublicWSURL string
-	UseProxy    bool
-	ProxyAddr   string
+// MongoDBConfig holds MongoDB connection settings.
+type MongoDBConfig struct {
+	Addr     string
+	Database string
 }
 
-// InfluxConfig holds InfluxDB 2.x connection configuration.
-type InfluxConfig struct {
-	URL      string
-	Org      string
-	Bucket   string
-	Username string
-	Password string
+// OKEXConfig holds OKEx WebSocket endpoint configuration.
+type OKEXConfig struct {
+	PublicWSURL   string
+	BusinessWSURL string
+	UseProxy      bool
+	ProxyAddr     string
 }
 
 // AnalysisConfig holds configuration for analysis functions.
@@ -85,8 +87,8 @@ type AnalysisConfig struct {
 // AppConfig aggregates all runtime configuration needed by backend services.
 type AppConfig struct {
 	Redis             RedisConfig
+	MongoDB           MongoDBConfig
 	OKEX              OKEXConfig
-	Influx            InfluxConfig
 	Analysis          AnalysisConfig
 	APIHTTPAddr       string
 	FrontendDevServer string
@@ -107,17 +109,15 @@ func LoadFromEnv() AppConfig {
 			TradingPairsKey: getenvWithDefault("REDIS_TRADING_PAIRS_KEY", "config:trading_pairs"),
 			PollIntervalSec: getenvIntWithDefault("TRADING_PAIRS_POLL_INTERVAL", 20),
 		},
-		OKEX: OKEXConfig{
-			PublicWSURL: getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
-			UseProxy:    getenvBoolWithDefault("USE_PROXY", false),
-			ProxyAddr:   os.Getenv("PROXY_ADDR"),
+		MongoDB: MongoDBConfig{
+			Addr:     getenvWithDefault("MONGODB_ADDR", "mongodb://127.0.0.1:27017"),
+			Database: getenvWithDefault("MONGODB_DATABASE", "technical_analysis"),
 		},
-		Influx: InfluxConfig{
-			URL:      os.Getenv("INFLUX_URL"),
-			Org:      os.Getenv("INFLUX_ORG"),
-			Bucket:   os.Getenv("INFLUX_BUCKET"),
-			Username: os.Getenv("INFLUX_USERNAME"),
-			Password: os.Getenv("INFLUX_PASSWORD"),
+		OKEX: OKEXConfig{
+			PublicWSURL:   getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
+			BusinessWSURL: getenvWithDefault("OKEX_WS_BUSINESS", "wss://ws.okx.com:8443/ws/v5/business"),
+			UseProxy:      getenvBoolWithDefault("USE_PROXY", false),
+			ProxyAddr:     os.Getenv("PROXY_ADDR"),
 		},
 		Analysis: AnalysisConfig{
 			// ComputeSupportResistance
