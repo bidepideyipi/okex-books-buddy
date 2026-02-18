@@ -137,7 +137,7 @@ export $(grep -v '^#' config/app.dev.env | xargs)
 
 ```bash
 cd /Users/anthony/Documents/github/okex-buddy/backend/go
-go run /cmd/main.go
+go run .
 ```
 
 ## 四大核心算法详解

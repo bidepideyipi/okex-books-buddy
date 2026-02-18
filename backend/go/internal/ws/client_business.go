@@ -27,6 +27,8 @@ type BusinessClient struct {
 	subscribedMu   sync.RWMutex
 	useProxy       bool
 	proxyAddr      string
+	pingInterval   time.Duration
+	pongTimeout   time.Duration
 }
 
 // NewBusinessClient creates a new business WebSocket client
@@ -40,6 +42,8 @@ func NewBusinessClient(url string, handler MessageHandler) *BusinessClient {
 		ctx:            ctx,
 		cancel:         cancel,
 		subscribed:     make(map[string]bool),
+		pingInterval:   25 * time.Second,
+		pongTimeout:    30 * time.Second,
 	}
 }
 
@@ -56,6 +60,8 @@ func NewBusinessClientWithProxy(url string, handler MessageHandler, useProxy boo
 		subscribed:     make(map[string]bool),
 		useProxy:       useProxy,
 		proxyAddr:      proxyAddr,
+		pingInterval:   25 * time.Second,
+		pongTimeout:    30 * time.Second,
 	}
 }
 
@@ -87,6 +93,7 @@ func (c *BusinessClient) Connect() error {
 	log.Printf("Business WebSocket connected to %s", c.url)
 
 	go c.readMessages()
+	go c.startPingPong()
 
 	return nil
 }
@@ -273,6 +280,34 @@ func (c *BusinessClient) resubscribeAll() {
 		channels := []string{"candle1D", "candle4H", "candle1H", "candle15m"}
 		if err := c.Subscribe(instruments, channels); err != nil {
 			log.Printf("Failed to resubscribe business: %v", err)
+		}
+	}
+}
+
+// startPingPong sends periodic ping messages to keep the connection alive
+func (c *BusinessClient) startPingPong() {
+	ticker := time.NewTicker(c.pingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			c.mu.RLock()
+			conn := c.conn
+			c.mu.RUnlock()
+
+			if conn == nil {
+				return
+			}
+
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
+				log.Printf("Failed to send ping on business WebSocket: %v", err)
+				return
+			}
+			log.Printf("[DEBUG] Business WebSocket ping sent")
 		}
 	}
 }

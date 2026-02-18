@@ -1,0 +1,13 @@
+{
+    "go.goroot": "/usr/local/opt/go@1.23/libexec",
+    "go.alternateTools": {
+        "go": "/usr/local/opt/go@1.23/bin/go",
+        "gopls": "/usr/local/opt/go@1.23/bin/gopls",
+        "dlv": "/Users/anthony/go/bin/dlv"
+    },
+    "go.buildOnSave": "off",
+    "go.useLanguageServer": true,
+    "go.lintOnSave": "workspace",
+    "go.vetOnSave": "workspace",
+    "go.toolsManagement.autoUpdate": false
+}

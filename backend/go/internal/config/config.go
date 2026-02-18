@@ -53,10 +53,12 @@ type MongoDBConfig struct {
 
 // OKEXConfig holds OKEx WebSocket endpoint configuration.
 type OKEXConfig struct {
-	PublicWSURL   string
-	BusinessWSURL string
-	UseProxy      bool
-	ProxyAddr     string
+	PublicWSURL      string
+	BusinessWSURL    string
+	UseProxy         bool
+	ProxyAddr        string
+	EnablePublicWS   bool
+	EnableBusinessWS bool
 }
 
 // AnalysisConfig holds configuration for analysis functions.
@@ -97,10 +99,7 @@ type AppConfig struct {
 // LoadFromEnv loads configuration from environment variables.
 // If not set, it will try to load from config/app.env file.
 func LoadFromEnv() AppConfig {
-	// Try to load from config file if env vars are not set
-	if os.Getenv("REDIS_ADDR") == "" {
-		loadEnvFile("config/app.env")
-	}
+	loadEnvFile("config/app.env")
 
 	return AppConfig{
 		Redis: RedisConfig{
@@ -114,10 +113,12 @@ func LoadFromEnv() AppConfig {
 			Database: getenvWithDefault("MONGODB_DATABASE", "technical_analysis"),
 		},
 		OKEX: OKEXConfig{
-			PublicWSURL:   getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
-			BusinessWSURL: getenvWithDefault("OKEX_WS_BUSINESS", "wss://ws.okx.com:8443/ws/v5/business"),
-			UseProxy:      getenvBoolWithDefault("USE_PROXY", false),
-			ProxyAddr:     os.Getenv("PROXY_ADDR"),
+			PublicWSURL:      getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
+			BusinessWSURL:    getenvWithDefault("OKEX_WS_BUSINESS", "wss://ws.okx.com:8443/ws/v5/business"),
+			UseProxy:         getenvBoolWithDefault("USE_PROXY", true),
+			ProxyAddr:        getenvWithDefault("PROXY_ADDR", "127.0.0.1:4781"),
+			EnablePublicWS:   getenvBoolWithDefault("ENABLE_PUBLIC_WS", true),
+			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", true),
 		},
 		Analysis: AnalysisConfig{
 			// ComputeSupportResistance
@@ -149,7 +150,6 @@ func LoadFromEnv() AppConfig {
 
 // loadEnvFile loads environment variables from a .env file
 func loadEnvFile(filePath string) {
-	// Get absolute path
 	absPath := filePath
 	if !filepath.IsAbs(filePath) {
 		if wd, err := os.Getwd(); err == nil {
@@ -162,6 +162,12 @@ func loadEnvFile(filePath string) {
 				curPath := filepath.Join(wd, filePath)
 				if _, err := os.Stat(curPath); err == nil {
 					absPath = curPath
+				} else {
+					// Try one level up
+					upPath := filepath.Join(wd, "..", filePath)
+					if _, err := os.Stat(upPath); err == nil {
+						absPath = upPath
+					}
 				}
 			}
 		}
@@ -169,7 +175,7 @@ func loadEnvFile(filePath string) {
 
 	file, err := os.Open(absPath)
 	if err != nil {
-		return // File not found, use defaults or existing env vars
+		return
 	}
 	defer file.Close()
 

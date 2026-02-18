@@ -27,6 +27,8 @@ type Client struct {
 	subscribedMu   sync.RWMutex
 	useProxy       bool
 	proxyAddr      string
+	pingInterval   time.Duration
+	pongTimeout   time.Duration
 }
 
 // MessageHandler processes incoming messages
@@ -43,6 +45,8 @@ func NewClient(url string, handler MessageHandler) *Client {
 		ctx:            ctx,
 		cancel:         cancel,
 		subscribed:     make(map[string]bool),
+		pingInterval:   25 * time.Second,
+		pongTimeout:    30 * time.Second,
 	}
 }
 
@@ -59,6 +63,8 @@ func NewClientWithProxy(url string, handler MessageHandler, useProxy bool, proxy
 		subscribed:     make(map[string]bool),
 		useProxy:       useProxy,
 		proxyAddr:      proxyAddr,
+		pingInterval:   25 * time.Second,
+		pongTimeout:    30 * time.Second,
 	}
 }
 
@@ -93,6 +99,7 @@ func (c *Client) Connect() error {
 
 	// Start message reader in goroutine
 	go c.readMessages()
+	go c.startPingPong()
 
 	return nil
 }
@@ -297,6 +304,34 @@ func (c *Client) resubscribeAll() {
 		log.Printf("Resubscribing to %d instruments", len(instruments))
 		if err := c.Subscribe(instruments); err != nil {
 			log.Printf("Failed to resubscribe: %v", err)
+		}
+	}
+}
+
+// startPingPong sends periodic ping messages to keep the connection alive
+func (c *Client) startPingPong() {
+	ticker := time.NewTicker(c.pingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			c.mu.RLock()
+			conn := c.conn
+			c.mu.RUnlock()
+
+			if conn == nil {
+				return
+			}
+
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
+				log.Printf("Failed to send ping on WebSocket: %v", err)
+				return
+			}
+			log.Printf("[DEBUG] Public WebSocket ping sent")
 		}
 	}
 }
