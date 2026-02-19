@@ -11,6 +11,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/net/proxy"
+
+	"github.com/supermancell/okex-buddy/internal/common"
 )
 
 // BusinessClient manages the WebSocket connection to OKEx business channel
@@ -18,7 +20,7 @@ type BusinessClient struct {
 	url            string
 	conn           *websocket.Conn
 	mu             sync.RWMutex
-	msgHandler     MessageHandler
+	msgHandler     common.MessageHandler
 	reconnectDelay time.Duration
 	maxReconnect   int
 	ctx            context.Context
@@ -28,15 +30,15 @@ type BusinessClient struct {
 	useProxy       bool
 	proxyAddr      string
 	pingInterval   time.Duration
-	pongTimeout   time.Duration
+	pongTimeout    time.Duration
 }
 
 // NewBusinessClient creates a new business WebSocket client
-func NewBusinessClient(url string, handler MessageHandler) *BusinessClient {
+func NewBusinessClient(url string, msgHandler common.MessageHandler) *BusinessClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &BusinessClient{
 		url:            url,
-		msgHandler:     handler,
+		msgHandler:     msgHandler,
 		reconnectDelay: 5 * time.Second,
 		maxReconnect:   3,
 		ctx:            ctx,
@@ -48,11 +50,11 @@ func NewBusinessClient(url string, handler MessageHandler) *BusinessClient {
 }
 
 // NewBusinessClientWithProxy creates a new business WebSocket client with proxy support
-func NewBusinessClientWithProxy(url string, handler MessageHandler, useProxy bool, proxyAddr string) *BusinessClient {
+func NewBusinessClientWithProxy(url string, msgHandler common.MessageHandler, useProxy bool, proxyAddr string) *BusinessClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &BusinessClient{
 		url:            url,
-		msgHandler:     handler,
+		msgHandler:     msgHandler,
 		reconnectDelay: 5 * time.Second,
 		maxReconnect:   3,
 		ctx:            ctx,
@@ -163,7 +165,12 @@ func (c *BusinessClient) reconnect() {
 }
 
 // Subscribe subscribes to candle channels for instruments
-func (c *BusinessClient) Subscribe(instruments []string, channels []string) error {
+func (c *BusinessClient) Subscribe(params interface{}) error {
+	instruments, ok := params.([]string)
+	if !ok {
+		return fmt.Errorf("invalid params type for BusinessClient Subscribe, expected []string")
+	}
+
 	c.mu.RLock()
 	conn := c.conn
 	c.mu.RUnlock()
@@ -172,6 +179,7 @@ func (c *BusinessClient) Subscribe(instruments []string, channels []string) erro
 		return fmt.Errorf("websocket not connected")
 	}
 
+	channels := []string{"candle1d", "candle4H", "candle1H", "candle15m"}
 	args := make([]map[string]string, 0, len(instruments)*len(channels))
 
 	for _, inst := range instruments {
@@ -212,7 +220,12 @@ func (c *BusinessClient) Subscribe(instruments []string, channels []string) erro
 }
 
 // Unsubscribe unsubscribes from candle channels
-func (c *BusinessClient) Unsubscribe(instruments []string, channels []string) error {
+func (c *BusinessClient) Unsubscribe(params interface{}) error {
+	instruments, ok := params.([]string)
+	if !ok {
+		return fmt.Errorf("invalid params type for BusinessClient Unsubscribe, expected []string")
+	}
+
 	c.mu.RLock()
 	conn := c.conn
 	c.mu.RUnlock()
@@ -221,6 +234,7 @@ func (c *BusinessClient) Unsubscribe(instruments []string, channels []string) er
 		return fmt.Errorf("websocket not connected")
 	}
 
+	channels := []string{"candle1d", "candle4H", "candle1H", "candle15m"}
 	args := make([]map[string]string, 0, len(instruments)*len(channels))
 
 	for _, inst := range instruments {
@@ -277,8 +291,7 @@ func (c *BusinessClient) resubscribeAll() {
 	instruments := c.GetSubscribed()
 	if len(instruments) > 0 {
 		log.Printf("Resubscribing business to %d instruments", len(instruments))
-		channels := []string{"candle1D", "candle4H", "candle1H", "candle15m"}
-		if err := c.Subscribe(instruments, channels); err != nil {
+		if err := c.Subscribe(instruments); err != nil {
 			log.Printf("Failed to resubscribe business: %v", err)
 		}
 	}

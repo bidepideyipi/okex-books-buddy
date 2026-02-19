@@ -11,26 +11,28 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
+	"github.com/supermancell/okex-buddy/internal/redisclient"
+	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
 // Signal represents a trading signal from Redis
 type Signal struct {
-	SignalID       string `json:"signal_id"`
-	StrategyName   string `json:"strategy_name"`
-	InstID         string `json:"inst_id"`
-	Side           string `json:"side"`
-	OrdType        string `json:"ord_type"`
-	PosSide        string `json:"pos_side"`
-	Sz             string `json:"sz"`
-	Px             string `json:"px"`
-	ReduceOnly     bool   `json:"reduce_only"`
-	TPTriggerPx    string `json:"tp_trigger_px"`
+	SignalID        string `json:"signal_id"`
+	StrategyName    string `json:"strategy_name"`
+	InstID          string `json:"inst_id"`
+	Side            string `json:"side"`
+	OrdType         string `json:"ord_type"`
+	PosSide         string `json:"pos_side"`
+	Sz              string `json:"sz"`
+	Px              string `json:"px"`
+	ReduceOnly      bool   `json:"reduce_only"`
+	TPTriggerPx     string `json:"tp_trigger_px"`
 	TPTriggerPxType string `json:"tp_trigger_px_type"`
-	SlTriggerPx    string `json:"sl_trigger_px"`
+	SlTriggerPx     string `json:"sl_trigger_px"`
 	SlTriggerPxType string `json:"sl_trigger_px_type"`
-	Ccy            string `json:"ccy"`
-	Tag            string `json:"tag"`
-	Timestamp      int64  `json:"timestamp"`
+	Ccy             string `json:"ccy"`
+	Tag             string `json:"tag"`
+	Timestamp       int64  `json:"timestamp"`
 }
 
 // SignalConsumer consumes trading signals from Redis List
@@ -41,19 +43,19 @@ type SignalConsumer struct {
 	timeout       time.Duration
 	ctx           context.Context
 	cancel        context.CancelFunc
-	orderCallback  func(*Signal) (string, string, error)
+	orderCallback func(*Signal) (string, string, error)
 }
 
 // NewSignalConsumer creates a new signal consumer
 func NewSignalConsumer(redisClient *redis.Client, mongoClient *mongodb.Client, strategies []string) *SignalConsumer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SignalConsumer{
-		redisClient:  redisClient,
-		mongoClient:  mongoClient,
-		strategies:   strategies,
-		timeout:      5 * time.Second,
-		ctx:          ctx,
-		cancel:       cancel,
+		redisClient: redisClient,
+		mongoClient: mongoClient,
+		strategies:  strategies,
+		timeout:     5 * time.Second,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -147,7 +149,7 @@ func (c *SignalConsumer) processSignal(signalData string) error {
 		return fmt.Errorf("failed to insert trading signal: %w", err)
 	}
 
-	log.Printf("Signal recorded: %s (inst=%s, side=%s, type=%s)", 
+	log.Printf("Signal recorded: %s (inst=%s, side=%s, type=%s)",
 		signal.SignalID, signal.InstID, signal.Side, signal.OrdType)
 
 	if c.orderCallback != nil {
@@ -216,4 +218,20 @@ func (c *SignalConsumer) validateSignal(signal *Signal) error {
 // GetSignalStatus retrieves the status of a trading signal
 func (c *SignalConsumer) GetSignalStatus(signalID string) (string, error) {
 	return "", nil
+}
+
+// StartSignalConsumer starts the trading signal consumer
+func StartSignalConsumer(redisClient *redisclient.Client, mongoClient *mongodb.Client, privateClient *ws.PrivateClient) {
+	strategies := []string{"momentum_strategy"}
+	consumer := NewSignalConsumer(redisClient.Client(), mongoClient, strategies)
+
+	orderProcessor := NewOrderProcessor(privateClient, mongoClient)
+	consumer.SetOrderCallback(func(sig *Signal) (string, string, error) {
+		return orderProcessor.PlaceOrder(sig)
+	})
+
+	go consumer.Start()
+	go orderProcessor.Start()
+
+	log.Println("Signal consumer started")
 }

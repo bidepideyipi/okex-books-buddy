@@ -5,21 +5,17 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 
 	"github.com/supermancell/okex-buddy/internal/config"
+	httpserver "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
+	signalservice "github.com/supermancell/okex-buddy/internal/signal"
+	"github.com/supermancell/okex-buddy/internal/subscription"
 	"github.com/supermancell/okex-buddy/internal/ws"
 	"github.com/supermancell/okex-buddy/internal/wshub"
-)
-
-// Global status trackers
-var (
-	websocketHealthy int32 = 1
-	redisHealthy     int32 = 1
 )
 
 func main() {
@@ -32,11 +28,11 @@ func main() {
 	redisClient, err := redisclient.NewClient(cfg.Redis.Addr, cfg.Redis.Password)
 	if err != nil {
 		log.Printf("Failed to connect to Redis: %v", err)
-		atomic.StoreInt32(&redisHealthy, 0)
+		httpserver.SetRedisHealthy(false)
 		log.Fatalf("Cannot start service without Redis connection")
 	}
 	defer func() {
-		atomic.StoreInt32(&redisHealthy, 0)
+		httpserver.SetRedisHealthy(false)
 		if err := redisClient.Close(); err != nil {
 			log.Printf("Failed to close Redis client: %v", err)
 		}
@@ -60,12 +56,12 @@ func main() {
 
 	obManager := orderbook.NewManager()
 
-	var wsClient *ws.Client
+	var wsClient *ws.PublicClient
 	if cfg.OKEX.EnablePublicWS {
 		wsClient = ConnectPublicWebSocket(cfg, obManager)
 		defer func() {
 			if wsClient != nil {
-				atomic.StoreInt32(&websocketHealthy, 0)
+				httpserver.SetWSHealthy(false)
 				wsClient.Close()
 			}
 		}()
@@ -90,7 +86,7 @@ func main() {
 			defer privateWsClient.Close()
 
 			if cfg.OKEX.EnablePrivateWS {
-				StartSignalConsumer(redisClient, mongoClient, privateWsClient)
+				signalservice.StartSignalConsumer(redisClient, mongoClient, privateWsClient)
 			}
 		}
 	} else if mongoClient != nil {
@@ -104,12 +100,12 @@ func main() {
 	defer cancel()
 
 	if wsClient != nil {
-		go StartOrderBookProcessor(ctx, wsClient, obManager, redisClient, cfg)
+		go orderbook.StartOrderBookProcessor(ctx, wsClient, obManager, redisClient, cfg)
 	}
 
-	var subManager *ws.SubscriptionManager
+	var subManager *subscription.SubscriptionManager
 	if wsClient != nil {
-		subManager = ws.NewSubscriptionManager(
+		subManager = subscription.NewSubscriptionManager(
 			wsClient,
 			redisClient,
 			cfg.Redis.TradingPairsKey,
@@ -139,7 +135,7 @@ func main() {
 
 	httpServerDone := make(chan struct{})
 	httpServerStop := make(chan struct{})
-	go StartHTTPServer(cfg.APIHTTPAddr, httpServerDone, httpServerStop)
+	go httpserver.StartHTTPServer(cfg.APIHTTPAddr, httpServerDone, httpServerStop)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)

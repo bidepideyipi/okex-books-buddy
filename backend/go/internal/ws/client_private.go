@@ -15,6 +15,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/net/proxy"
+
+	"github.com/supermancell/okex-buddy/internal/common"
 )
 
 // OKExConfig holds OKEx API credentials
@@ -32,7 +34,7 @@ type PrivateClient struct {
 	url            string
 	conn           *websocket.Conn
 	mu             sync.RWMutex
-	msgHandler     MessageHandler
+	msgHandler     common.MessageHandler
 	reconnectDelay time.Duration
 	maxReconnect   int
 	ctx            context.Context
@@ -50,21 +52,21 @@ type PrivateClient struct {
 }
 
 // NewPrivateClient creates a new private WebSocket client
-func NewPrivateClient(url string, handler MessageHandler, config OKExConfig) *PrivateClient {
-	return NewPrivateClientWithProxy(url, handler, false, "", config)
+func NewPrivateClient(url string, msgHandler common.MessageHandler, config OKExConfig) *PrivateClient {
+	return NewPrivateClientWithProxy(url, msgHandler, false, "", config)
 }
 
 // NewPrivateClientWithProxy creates a new private WebSocket client with proxy support
-func NewPrivateClientWithProxy(url string, handler MessageHandler, useProxy bool, proxyAddr string, config OKExConfig) *PrivateClient {
-	return NewPrivateClientWithDualProxy(url, handler, useProxy, proxyAddr, "", config)
+func NewPrivateClientWithProxy(url string, msgHandler common.MessageHandler, useProxy bool, proxyAddr string, config OKExConfig) *PrivateClient {
+	return NewPrivateClientWithDualProxy(url, msgHandler, useProxy, proxyAddr, "", config)
 }
 
 // NewPrivateClientWithDualProxy creates a new private WebSocket client with both SOCKS5 and HTTP proxy support
-func NewPrivateClientWithDualProxy(url string, handler MessageHandler, useProxy bool, proxyAddr string, httpProxyAddr string, config OKExConfig) *PrivateClient {
+func NewPrivateClientWithDualProxy(url string, msgHandler common.MessageHandler, useProxy bool, proxyAddr string, httpProxyAddr string, config OKExConfig) *PrivateClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PrivateClient{
 		url:            url,
-		msgHandler:     handler,
+		msgHandler:     msgHandler,
 		reconnectDelay: 5 * time.Second,
 		maxReconnect:   3,
 		ctx:            ctx,
@@ -76,6 +78,7 @@ func NewPrivateClientWithDualProxy(url string, handler MessageHandler, useProxy 
 		pingInterval:   25 * time.Second,
 		pongTimeout:    30 * time.Second,
 		config:         config,
+		authenticated:  false,
 		loginSuccess:   make(chan bool, 1),
 	}
 }
@@ -135,10 +138,10 @@ func (c *PrivateClient) Login() error {
 		"op": "login",
 		"args": []map[string]string{
 			{
-				"apiKey":    c.config.APIKey,
+				"apiKey":     c.config.APIKey,
 				"passphrase": c.config.Passphrase,
-				"timestamp": timestamp,
-				"sign":      signature,
+				"timestamp":  timestamp,
+				"sign":       signature,
 			},
 		},
 	}
@@ -297,7 +300,12 @@ func (c *PrivateClient) reconnect() {
 }
 
 // Subscribe subscribes to private channels
-func (c *PrivateClient) Subscribe(channels []map[string]string) error {
+func (c *PrivateClient) Subscribe(params interface{}) error {
+	channels, ok := params.([]map[string]string)
+	if !ok {
+		return fmt.Errorf("invalid params type for PrivateClient Subscribe, expected []map[string]string")
+	}
+
 	c.mu.RLock()
 	conn := c.conn
 	c.mu.RUnlock()
@@ -336,7 +344,12 @@ func (c *PrivateClient) Subscribe(channels []map[string]string) error {
 }
 
 // Unsubscribe unsubscribes from private channels
-func (c *PrivateClient) Unsubscribe(channels []map[string]string) error {
+func (c *PrivateClient) Unsubscribe(params interface{}) error {
+	channels, ok := params.([]map[string]string)
+	if !ok {
+		return fmt.Errorf("invalid params type for PrivateClient Unsubscribe, expected []map[string]string")
+	}
+
 	c.mu.RLock()
 	conn := c.conn
 	c.mu.RUnlock()
