@@ -55,10 +55,13 @@ type MongoDBConfig struct {
 type OKEXConfig struct {
 	PublicWSURL      string
 	BusinessWSURL    string
+	PrivateWSURL     string
 	UseProxy         bool
 	ProxyAddr        string
+	HTTPProxyAddr    string
 	EnablePublicWS   bool
 	EnableBusinessWS bool
+	EnablePrivateWS  bool
 }
 
 // AnalysisConfig holds configuration for analysis functions.
@@ -115,10 +118,13 @@ func LoadFromEnv() AppConfig {
 		OKEX: OKEXConfig{
 			PublicWSURL:      getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
 			BusinessWSURL:    getenvWithDefault("OKEX_WS_BUSINESS", "wss://ws.okx.com:8443/ws/v5/business"),
+			PrivateWSURL:     getenvWithDefault("OKEX_WS_PRIVATE", "wss://ws.okx.com:8443/ws/v5/private"),
 			UseProxy:         getenvBoolWithDefault("USE_PROXY", true),
 			ProxyAddr:        getenvWithDefault("PROXY_ADDR", "127.0.0.1:4781"),
-			EnablePublicWS:   getenvBoolWithDefault("ENABLE_PUBLIC_WS", true),
-			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", true),
+			HTTPProxyAddr:    getenvWithDefault("HTTP_PROXY_ADDR", "127.0.0.1:4780"),
+			EnablePublicWS:   getenvBoolWithDefault("ENABLE_PUBLIC_WS", false),
+			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", false),
+			EnablePrivateWS:  getenvBoolWithDefault("ENABLE_PRIVATE_WS", true),
 		},
 		Analysis: AnalysisConfig{
 			// ComputeSupportResistance

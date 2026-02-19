@@ -27,7 +27,7 @@ func main() {
 	log.Println("OKEx Buddy - Combined WebSocket Client and API Server")
 	log.Printf("Config loaded: Redis=%s, OKEx WS=%s, API HTTP=%s\n", cfg.Redis.Addr, cfg.OKEX.PublicWSURL, cfg.APIHTTPAddr)
 	log.Printf("Proxy config: USE_PROXY=%v, PROXY_ADDR=%s", cfg.OKEX.UseProxy, cfg.OKEX.ProxyAddr)
-	log.Printf("WebSocket enable: PublicWS=%v, BusinessWS=%v", cfg.OKEX.EnablePublicWS, cfg.OKEX.EnableBusinessWS)
+	log.Printf("WebSocket enable: PublicWS=%v, BusinessWS=%v, PrivateWS=%v", cfg.OKEX.EnablePublicWS, cfg.OKEX.EnableBusinessWS, cfg.OKEX.EnablePrivateWS)
 
 	redisClient, err := redisclient.NewClient(cfg.Redis.Addr, cfg.Redis.Password)
 	if err != nil {
@@ -81,6 +81,20 @@ func main() {
 		}
 	} else if mongoClient != nil {
 		log.Println("Business WebSocket is disabled, skipping connection")
+	}
+
+	var privateWsClient *ws.PrivateClient
+	if mongoClient != nil && cfg.OKEX.EnablePrivateWS {
+		privateWsClient = ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
+		if privateWsClient != nil {
+			defer privateWsClient.Close()
+
+			if cfg.OKEX.EnablePrivateWS {
+				StartSignalConsumer(redisClient, mongoClient, privateWsClient)
+			}
+		}
+	} else if mongoClient != nil {
+		log.Println("Private WebSocket is disabled, skipping connection")
 	}
 
 	hub := wshub.NewHub()

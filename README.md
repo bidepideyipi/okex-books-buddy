@@ -427,3 +427,10 @@ func adjustParameters(marketVolatility float64) (binCount int, zThreshold float6
 - 定期清理无用的历史计算结果
 
 建议根据具体的交易场景、市场条件和个人风险偏好，灵活组合使用这四个核心算法，以构建最适合的量化交易策略。
+
+
+向 Redis List 推送交易信号：
+
+```text
+redis-cli LPUSH trading_signals:momentum_strategy '{"signal_id":"sig_001","strategy_name":"momentum_strategy","inst_id":"ETH-USDT-SWAP","side":"buy","ord_type":"market","pos_side":"long","sz":"0.1","timestamp":1708387200000}'
+```

@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/supermancell/okex-buddy/internal/config"
+	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
+	"github.com/supermancell/okex-buddy/internal/signal"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
@@ -202,4 +204,76 @@ func StartOrderBookProcessor(ctx context.Context, wsClient *ws.Client, obManager
 			return
 		}
 	}
+}
+
+// ConnectPrivateWebSocket connects to OKEx private WebSocket
+func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, redisClient *redisclient.Client) *ws.PrivateClient {
+	log.Println("Connecting to Private WebSocket...")
+
+	apiKey, secretKey, passphrase, err := mongoClient.GetOKExConfig()
+	if err != nil {
+		log.Printf("Failed to get OKEx config from MongoDB: %v", err)
+		log.Printf("Please ensure API credentials are stored in MongoDB config collection")
+		return nil
+	}
+
+	privateConfig := ws.OKExConfig{
+		APIKey:    apiKey,
+		SecretKey: secretKey,
+		Passphrase: passphrase,
+	}
+
+	orderProcessor := signal.NewOrderProcessor(nil, mongoClient)
+	handler := NewPrivateMessageHandler(mongoClient, orderProcessor)
+
+	var privateClient *ws.PrivateClient
+	if cfg.OKEX.UseProxy {
+		privateClient = ws.NewPrivateClientWithDualProxy(cfg.OKEX.PrivateWSURL, handler, true, cfg.OKEX.ProxyAddr, cfg.OKEX.HTTPProxyAddr, privateConfig)
+	} else {
+		privateClient = ws.NewPrivateClient(cfg.OKEX.PrivateWSURL, handler, privateConfig)
+	}
+
+	orderProcessor = signal.NewOrderProcessor(privateClient, mongoClient)
+
+	if err := privateClient.Connect(); err != nil {
+		log.Printf("Failed to connect to Private WebSocket: %v", err)
+		return nil
+	}
+
+	if err := privateClient.Login(); err != nil {
+		log.Printf("Failed to login to Private WebSocket: %v", err)
+		privateClient.Close()
+		return nil
+	}
+
+	channels := []map[string]string{
+		{"channel": "orders", "instType": "SWAP"},
+		{"channel": "positions", "instType": "SWAP"},
+		{"channel": "account-greeks", "instType": "SWAP"},
+	}
+
+	if err := privateClient.Subscribe(channels); err != nil {
+		log.Printf("Failed to subscribe to private channels: %v", err)
+		return nil
+	}
+
+	log.Println("Private WebSocket connected, authenticated, and subscribed")
+
+	return privateClient
+}
+
+// StartSignalConsumer starts the trading signal consumer
+func StartSignalConsumer(redisClient *redisclient.Client, mongoClient *mongodb.Client, privateClient *ws.PrivateClient) {
+	strategies := []string{"momentum_strategy"}
+	consumer := signal.NewSignalConsumer(redisClient.Client(), mongoClient, strategies)
+
+	orderProcessor := signal.NewOrderProcessor(privateClient, mongoClient)
+	consumer.SetOrderCallback(func(sig *signal.Signal) (string, string, error) {
+		return orderProcessor.PlaceOrder(sig)
+	})
+
+	go consumer.Start()
+	go orderProcessor.Start()
+
+	log.Println("Signal consumer started")
 }

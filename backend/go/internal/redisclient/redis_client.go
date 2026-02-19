@@ -245,3 +245,8 @@ func (c *Client) UpdateSystemMonitoring(fields map[string]interface{}) error {
 func (c *Client) Close() error {
 	return c.rdb.Close()
 }
+
+// Client returns the underlying Redis client
+func (c *Client) Client() *redis.Client {
+	return c.rdb
+}
