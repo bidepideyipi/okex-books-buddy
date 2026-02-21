@@ -10,7 +10,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${fileDirname}"
+            "program": "${fileDirname}",
+            "cwd": "${workspaceFolder}"
         },
         {
             "name": "Debug OKEx Buddy",
@@ -31,7 +32,8 @@
                 "USE_PROXY": "true",
                 "PROXY_ADDR": "127.0.0.1:4781",
                 "ENABLE_PUBLIC_WS": "false",
-                "ENABLE_BUSINESS_WS": "true"
+                "ENABLE_BUSINESS_WS": "true",
+                "ENABLE_PRIVATE_WS": "false"
             },
             "args": [],
             "showLog": true,

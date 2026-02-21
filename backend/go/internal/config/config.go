@@ -123,8 +123,8 @@ func LoadFromEnv() AppConfig {
 			ProxyAddr:        getenvWithDefault("PROXY_ADDR", "127.0.0.1:4781"),
 			HTTPProxyAddr:    getenvWithDefault("HTTP_PROXY_ADDR", "127.0.0.1:4780"),
 			EnablePublicWS:   getenvBoolWithDefault("ENABLE_PUBLIC_WS", false),
-			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", false),
-			EnablePrivateWS:  getenvBoolWithDefault("ENABLE_PRIVATE_WS", true),
+			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", true),
+			EnablePrivateWS:  getenvBoolWithDefault("ENABLE_PRIVATE_WS", false),
 		},
 		Analysis: AnalysisConfig{
 			// ComputeSupportResistance
