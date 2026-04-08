@@ -15,23 +15,30 @@ import (
 	signalservice "github.com/supermancell/okex-buddy/internal/signal"
 	"github.com/supermancell/okex-buddy/internal/subscription"
 	"github.com/supermancell/okex-buddy/internal/ws"
-	"github.com/supermancell/okex-buddy/internal/wshub"
 )
 
 func main() {
+	/**
+	 * 加载配置
+	 */
 	cfg := config.LoadFromEnv()
 	log.Println("OKEx Buddy - Combined WebSocket Client and API Server")
 	log.Printf("Config loaded: Redis=%s, OKEx WS=%s, API HTTP=%s\n", cfg.Redis.Addr, cfg.OKEX.PublicWSURL, cfg.APIHTTPAddr)
 	log.Printf("Proxy config: USE_PROXY=%v, PROXY_ADDR=%s", cfg.OKEX.UseProxy, cfg.OKEX.ProxyAddr)
 	log.Printf("WebSocket enable: PublicWS=%v, BusinessWS=%v, PrivateWS=%v", cfg.OKEX.EnablePublicWS, cfg.OKEX.EnableBusinessWS, cfg.OKEX.EnablePrivateWS)
 
+	/**
+	 * 连接到 Redis
+	 */
 	redisClient, err := redisclient.NewClient(cfg.Redis.Addr, cfg.Redis.Password)
 	if err != nil {
 		log.Printf("Failed to connect to Redis: %v", err)
+		//当 Redis 连接失败时，立即将 Redis 健康状态设置为 false ，然后程序退出。这确保了即使服务启动失败，健康检查也能正确反映 Redis 的状态
 		httpserver.SetRedisHealthy(false)
 		log.Fatalf("Cannot start service without Redis connection")
 	}
 	defer func() {
+		//当程序正常退出时，在 defer 函数中设置 Redis 健康状态为 false 。这确保了服务停止时，健康检查能正确反映 Redis 连接已关闭。
 		httpserver.SetRedisHealthy(false)
 		if err := redisClient.Close(); err != nil {
 			log.Printf("Failed to close Redis client: %v", err)
@@ -39,6 +46,9 @@ func main() {
 	}()
 	log.Println("Connected to Redis")
 
+	/**
+	 * 连接到 MongoDB
+	 */
 	var mongoClient *mongodb.Client
 	if cfg.MongoDB.Addr != "" {
 		mongoClient, err = mongodb.NewClient(cfg.MongoDB.Addr, cfg.MongoDB.Database)
@@ -56,6 +66,9 @@ func main() {
 
 	obManager := orderbook.NewManager()
 
+	/**
+	 * 连接到 Public WebSocket
+	 */
 	var wsClient *ws.PublicClient
 	if cfg.OKEX.EnablePublicWS {
 		wsClient = ConnectPublicWebSocket(cfg, obManager)
@@ -69,6 +82,9 @@ func main() {
 		log.Println("Public WebSocket is disabled, skipping connection")
 	}
 
+	/**
+	 * 连接到 Business WebSocket
+	 */
 	var businessWsClient *ws.BusinessClient
 	if mongoClient != nil && cfg.OKEX.EnableBusinessWS {
 		businessWsClient = ConnectBusinessWebSocket(cfg, mongoClient)
@@ -79,6 +95,9 @@ func main() {
 		log.Println("Business WebSocket is disabled, skipping connection")
 	}
 
+	/**
+	 * 连接到 Private WebSocket
+	 */
 	var privateWsClient *ws.PrivateClient
 	if mongoClient != nil && cfg.OKEX.EnablePrivateWS {
 		privateWsClient = ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
@@ -93,9 +112,11 @@ func main() {
 		log.Println("Private WebSocket is disabled, skipping connection")
 	}
 
-	hub := wshub.NewHub()
-	go hub.Run()
-
+	/**
+	 * a.创建一个可取消的上下文
+	 * b.创建订单薄处理器
+	 * c. SubscriptionManager订阅管理
+	 */
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -119,18 +140,6 @@ func main() {
 		log.Printf("Subscription manager started (polling every %d seconds)", cfg.Redis.PollIntervalSec)
 	} else {
 		log.Println("Subscription manager skipped because Public WebSocket is disabled")
-	}
-
-	monitoringData := map[string]interface{}{
-		"websocket_connections": 0,
-		"active_pairs":          0,
-	}
-	if wsClient != nil {
-		monitoringData["websocket_connections"] = 1
-		monitoringData["active_pairs"] = len(wsClient.GetSubscribed())
-	}
-	if err := redisClient.UpdateSystemMonitoring(monitoringData); err != nil {
-		log.Printf("Failed to update system monitoring: %v", err)
 	}
 
 	httpServerDone := make(chan struct{})

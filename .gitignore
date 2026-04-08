@@ -5,3 +5,6 @@ backend/go/ws_public
 backend/go/api_server
 backend/go/ws_public
 backend/go/cmd/__debug_bin1866509822
+config/app.env
+bin/*
+backend/go/bin/*

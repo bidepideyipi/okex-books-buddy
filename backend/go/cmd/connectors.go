@@ -4,8 +4,8 @@ import (
 	"log"
 
 	"github.com/supermancell/okex-buddy/internal/config"
-	httpserver "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/handler"
+	httpserver "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
@@ -113,7 +113,6 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 	channels := []map[string]string{
 		{"channel": "orders", "instType": "SWAP"},
 		{"channel": "positions", "instType": "SWAP"},
-		{"channel": "account-greeks", "instType": "SWAP"},
 	}
 
 	if err := privateClient.Subscribe(channels); err != nil {

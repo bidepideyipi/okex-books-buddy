@@ -537,5 +537,5 @@ func ParseOrderID(message []byte) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("order ID not found in message")
+	return "", nil
 }

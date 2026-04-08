@@ -432,5 +432,5 @@ func adjustParameters(marketVolatility float64) (binCount int, zThreshold float6
 向 Redis List 推送交易信号：
 
 ```text
-redis-cli LPUSH trading_signals:momentum_strategy '{"signal_id":"sig_001","strategy_name":"momentum_strategy","inst_id":"ETH-USDT-SWAP","side":"buy","ord_type":"market","pos_side":"long","sz":"0.1","timestamp":1708387200000}'
+redis-cli LPUSH trading_signals:momentum_strategy '{"signal_id":"sig_011","strategy_name":"momentum_strategy","inst_id":"10461","side":"buy","ord_type":"market","pos_side":"long","sz":"0.1","timestamp":1708387200000}'
 ```

@@ -58,7 +58,7 @@
   "_id": "69956b4690438b25d316f38b",
   "item": "okexAccount",
   "key": "api_key",
-  "value": "f2e19abc-3e75-47df-a5f1-8518f8eb89c1",
+  "value": "{API_KEY_PLACEHOLDER}",
   "desc": "API Key"
 }
 ```
@@ -101,8 +101,8 @@
   "op": "login",
   "args": [
     {
-      "apiKey": "f2e19abc-3e75-47df-a5f1-8518f8eb89c1",
-      "passphrase": "1!UJKickTheSteelPlate",
+      "apiKey": "{API_KEY_PLACEHOLDER}",
+      "passphrase": "{PASSPHRASE_PLACEHOLDER}",
       "timestamp": "2024-12-08T09:08:57.715Z",
       "sign": "HMAC_SHA256_加密的签名"
     }
@@ -152,7 +152,6 @@ sign = Base64(HMAC_SHA256(timestamp + 'login' + '', SecretKey))
 |---------|------|------|-------------|
 | 订单频道 | orders | 订单相关数据（下单、撤单、成交、委托失败等） | MongoDB 集合 |
 | 持仓频道 | positions | 持仓数据（仓位、未实现盈亏等） | MongoDB 集合 |
-| 账户 greeks 频道 | account-greeks | 希腊字母数据（期权风险指标） | MongoDB 集合 |
 
 #### 3.3.2 订单频道数据
 

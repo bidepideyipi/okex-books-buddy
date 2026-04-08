@@ -55,7 +55,7 @@ func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err 
 
 	args := []map[string]string{
 		{
-			"instId":     signal.InstID,
+			"instIdCode": signal.InstID,
 			"tdMode":     "cross",
 			"clOrdId":    clOrdID,
 			"side":       signal.Side,
@@ -81,14 +81,19 @@ func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err 
 
 // HandleOrderResponse handles order response from WebSocket
 func (p *OrderProcessor) HandleOrderResponse(message []byte) error {
-	log.Printf("[DEBUG] Received order response: %s", string(message))
+
+	log.Printf("[Priavte channel] Received order response %s", string(message))
 
 	ordID, err := ws.ParseOrderID(message)
 	if err != nil {
 		log.Printf("[DEBUG] No order ID in response (expected for failed orders): %v", err)
 		return err
 	}
-	log.Printf("[DEBUG] Parsed order ID: %s", ordID)
+
+	if ordID != "" {
+		//TODO
+		log.Printf("Parsed order ID: %s, <- TODO something here", ordID)
+	}
 
 	p.orderIDMap.Store(ordID, message)
 
@@ -97,7 +102,6 @@ func (p *OrderProcessor) HandleOrderResponse(message []byte) error {
 		log.Printf("[ERROR] Failed to unmarshal order response: %v", err)
 		return err
 	}
-	log.Printf("[DEBUG] Unmarshaled message: %+v", msg)
 
 	if data, ok := msg["data"].([]interface{}); ok && len(data) > 0 {
 		log.Printf("[DEBUG] Found %d items in data array", len(data))
@@ -110,20 +114,10 @@ func (p *OrderProcessor) HandleOrderResponse(message []byte) error {
 					log.Printf("[DEBUG] Found associated signal ID: %s", signalID)
 					if err := p.mongoClient.UpdateSignalWithOrderID(signalID, ordID, clOrdID, "success"); err != nil {
 						log.Printf("[ERROR] Failed to update signal %s with order ID: %v", signalID, err)
-					} else {
-						log.Printf("[INFO] Signal %s updated with ordID=%s, clOrdID=%s", signalID, ordID, clOrdID)
 					}
-				} else {
-					log.Printf("[WARN] No signal ID found for client order ID: %s", clOrdID)
 				}
-			} else {
-				log.Printf("[WARN] Client order ID not found in order data")
 			}
-		} else {
-			log.Printf("[WARN] Failed to cast data[0] to map[string]interface{}")
 		}
-	} else {
-		log.Printf("[WARN] No valid data array found in message or data is empty")
 	}
 
 	return nil
