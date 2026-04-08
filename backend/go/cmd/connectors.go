@@ -14,7 +14,7 @@ import (
 )
 
 // ConnectPublicWebSocket connects to the public WebSocket endpoint
-func ConnectPublicWebSocket(cfg config.AppConfig, obManager *orderbook.Manager) *ws.PublicClient {
+func ConnectPublicWebSocket(cfg config.AppConfig, obManager *orderbook.Manager) (*ws.PublicClient, error) {
 	log.Printf("Public WebSocket is enabled, connecting to: %s", cfg.OKEX.PublicWSURL)
 	messageHandler := handler.NewPublicMessageHandler(obManager)
 
@@ -29,16 +29,16 @@ func ConnectPublicWebSocket(cfg config.AppConfig, obManager *orderbook.Manager) 
 
 	if err := wsClient.Connect(); err != nil {
 		log.Printf("Failed to connect to OKEx WebSocket: %v", err)
-		httpserver.SetWSHealthy(false)
-		return nil
+		httpserver.SetPublicWSHealthy(false)
+		return nil, err
 	}
 
 	log.Println("Connected to OKEx WebSocket")
-	return wsClient
+	return wsClient, nil
 }
 
 // ConnectBusinessWebSocket connects to the business WebSocket endpoint
-func ConnectBusinessWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client) *ws.BusinessClient {
+func ConnectBusinessWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client) (*ws.BusinessClient, error) {
 	log.Printf("Business WebSocket is enabled, connecting to: %s", cfg.OKEX.BusinessWSURL)
 	businessMessageHandler := handler.NewBusinessMessageHandler(mongoClient)
 
@@ -54,7 +54,7 @@ func ConnectBusinessWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client)
 	log.Println("Attempting to connect to Business WebSocket...")
 	if err := businessWsClient.Connect(); err != nil {
 		log.Printf("Failed to connect to OKEx Business WebSocket: %v", err)
-		return nil
+		return nil, err
 	}
 
 	log.Println("Connected to OKEx Business WebSocket")
@@ -63,22 +63,23 @@ func ConnectBusinessWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client)
 	log.Printf("Subscribing to Business WebSocket instruments: %v", instruments)
 	if err := businessWsClient.Subscribe(instruments); err != nil {
 		log.Printf("Failed to subscribe to candlestick channels: %v", err)
+		return nil, err
 	} else {
 		log.Println("Successfully subscribed to candlestick channels")
 	}
 
-	return businessWsClient
+	return businessWsClient, nil
 }
 
 // ConnectPrivateWebSocket connects to OKEx private WebSocket
-func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, redisClient *redisclient.Client) *ws.PrivateClient {
+func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, redisClient *redisclient.Client) (*ws.PrivateClient, error) {
 	log.Println("Connecting to Private WebSocket...")
 
 	apiKey, secretKey, passphrase, err := mongoClient.GetOKExConfig()
 	if err != nil {
 		log.Printf("Failed to get OKEx config from MongoDB: %v", err)
 		log.Printf("Please ensure API credentials are stored in MongoDB config collection")
-		return nil
+		return nil, err
 	}
 
 	privateConfig := ws.OKExConfig{
@@ -101,13 +102,13 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 
 	if err := privateClient.Connect(); err != nil {
 		log.Printf("Failed to connect to Private WebSocket: %v", err)
-		return nil
+		return nil, err
 	}
 
 	if err := privateClient.Login(); err != nil {
 		log.Printf("Failed to login to Private WebSocket: %v", err)
 		privateClient.Close()
-		return nil
+		return nil, err
 	}
 
 	channels := []map[string]string{
@@ -117,10 +118,10 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 
 	if err := privateClient.Subscribe(channels); err != nil {
 		log.Printf("Failed to subscribe to private channels: %v", err)
-		return nil
+		return nil, err
 	}
 
 	log.Println("Private WebSocket connected, authenticated, and subscribed")
 
-	return privateClient
+	return privateClient, nil
 }

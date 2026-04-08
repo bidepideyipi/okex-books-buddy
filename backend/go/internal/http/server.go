@@ -10,34 +10,36 @@ import (
 )
 
 var (
-	wsHealthy  int32 = 1
-	redisHealthy int32 = 1
+	publicWSHealthy   int32 = 0
+	privateWSHealthy  int32 = 0
+	businessWSHealthy int32 = 0
+	redisHealthy      int32 = 1
 )
 
-// HealthCheckResponse represents the health check response structure
-type HealthCheckResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    struct {
-		WebSocket struct {
-			Status    string `json:"status"`
-			Message   string `json:"message"`
-			Timestamp int64  `json:"timestamp"`
-		} `json:"websocket"`
-		Redis struct {
-			Status    string `json:"status"`
-			Message   string `json:"message"`
-			Timestamp int64  `json:"timestamp"`
-		} `json:"redis"`
-	} `json:"data"`
+// SetPublicWSHealthy sets the Public WebSocket health status
+func SetPublicWSHealthy(healthy bool) {
+	if healthy {
+		atomic.StoreInt32(&publicWSHealthy, 1)
+	} else {
+		atomic.StoreInt32(&publicWSHealthy, 0)
+	}
 }
 
-// SetWSHealthy sets the WebSocket health status
-func SetWSHealthy(healthy bool) {
+// SetPrivateWSHealthy sets the Private WebSocket health status
+func SetPrivateWSHealthy(healthy bool) {
 	if healthy {
-		atomic.StoreInt32(&wsHealthy, 1)
+		atomic.StoreInt32(&privateWSHealthy, 1)
 	} else {
-		atomic.StoreInt32(&wsHealthy, 0)
+		atomic.StoreInt32(&privateWSHealthy, 0)
+	}
+}
+
+// SetBusinessWSHealthy sets the Business WebSocket health status
+func SetBusinessWSHealthy(healthy bool) {
+	if healthy {
+		atomic.StoreInt32(&businessWSHealthy, 1)
+	} else {
+		atomic.StoreInt32(&businessWSHealthy, 0)
 	}
 }
 
@@ -91,7 +93,9 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wsStatus := atomic.LoadInt32(&wsHealthy)
+	publicWSStatus := atomic.LoadInt32(&publicWSHealthy)
+	privateWSStatus := atomic.LoadInt32(&privateWSHealthy)
+	businessWSStatus := atomic.LoadInt32(&businessWSHealthy)
 	redisStatus := atomic.LoadInt32(&redisHealthy)
 
 	response := HealthCheckResponse{
@@ -99,15 +103,35 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		Message: "success",
 	}
 
-	if wsStatus == 1 {
-		response.Data.WebSocket.Status = "healthy"
-		response.Data.WebSocket.Message = "WebSocket connections are active"
+	if publicWSStatus == 1 {
+		response.Data.PublicWebSocket.Status = "healthy"
+		response.Data.PublicWebSocket.Message = "Public WebSocket connection is active"
 	} else {
-		response.Data.WebSocket.Status = "unhealthy"
-		response.Data.WebSocket.Message = "WebSocket connections failed or reached max reconnection attempts"
+		response.Data.PublicWebSocket.Status = "closed"
+		response.Data.PublicWebSocket.Message = "Public WebSocket connection is closed"
 		response.Code = 503
 	}
-	response.Data.WebSocket.Timestamp = time.Now().Unix()
+	response.Data.PublicWebSocket.Timestamp = time.Now().Unix()
+
+	if privateWSStatus == 1 {
+		response.Data.PrivateWebSocket.Status = "healthy"
+		response.Data.PrivateWebSocket.Message = "Private WebSocket connection is active"
+	} else {
+		response.Data.PrivateWebSocket.Status = "closed"
+		response.Data.PrivateWebSocket.Message = "Private WebSocket connection is closed"
+		response.Code = 503
+	}
+	response.Data.PrivateWebSocket.Timestamp = time.Now().Unix()
+
+	if businessWSStatus == 1 {
+		response.Data.BusinessWebSocket.Status = "healthy"
+		response.Data.BusinessWebSocket.Message = "Business WebSocket connection is active"
+	} else {
+		response.Data.BusinessWebSocket.Status = "closed"
+		response.Data.BusinessWebSocket.Message = "Business WebSocket connection is closed"
+		response.Code = 503
+	}
+	response.Data.BusinessWebSocket.Timestamp = time.Now().Unix()
 
 	if redisStatus == 1 {
 		response.Data.Redis.Status = "healthy"

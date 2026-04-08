@@ -84,42 +84,115 @@ func (p *OrderProcessor) HandleOrderResponse(message []byte) error {
 
 	log.Printf("[Priavte channel] Received order response %s", string(message))
 
-	ordID, err := ws.ParseOrderID(message)
-	if err != nil {
-		log.Printf("[DEBUG] No order ID in response (expected for failed orders): %v", err)
-		return err
-	}
-
-	if ordID != "" {
-		//TODO
-		log.Printf("Parsed order ID: %s, <- TODO something here", ordID)
-	}
-
-	p.orderIDMap.Store(ordID, message)
-
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
 		log.Printf("[ERROR] Failed to unmarshal order response: %v", err)
 		return err
 	}
 
+	// Check if it's an event notification
+	if event, ok := msg["event"].(string); ok {
+		switch event {
+		case "channel-conn-count":
+			log.Printf("[INFO] Channel connection count notification")
+		case "subscribe":
+			if arg, ok := msg["arg"].(map[string]interface{}); ok {
+				if channel, ok := arg["channel"].(string); ok {
+					log.Printf("[INFO] Subscribe successful: channel=%s", channel)
+				}
+			}
+		case "unsubscribe":
+			if arg, ok := msg["arg"].(map[string]interface{}); ok {
+				if channel, ok := arg["channel"].(string); ok {
+					log.Printf("[INFO] Unsubscribe successful: channel=%s", channel)
+				}
+			}
+		case "error":
+			log.Printf("[ERROR] Event error: %v", msg)
+		default:
+			log.Printf("[INFO] Unknown event: %s", event)
+		}
+		return nil
+	}
+
+	// Check if it's an order operation response
+	if op, ok := msg["op"].(string); ok && op == "order" {
+		if code, ok := msg["code"].(string); ok {
+			if code == "0" {
+				log.Printf("[INFO] Order operation successful")
+			} else {
+				msgText, _ := msg["msg"].(string)
+				log.Printf("[ERROR] Order operation failed: code=%s, msg=%s", code, msgText)
+			}
+		}
+		return nil
+	}
+
+	// Check if it's data notification
 	if data, ok := msg["data"].([]interface{}); ok && len(data) > 0 {
-		log.Printf("[DEBUG] Found %d items in data array", len(data))
-		if order, ok := data[0].(map[string]interface{}); ok {
-			log.Printf("[DEBUG] Processing order data: %+v", order)
-			if clOrdID, ok := order["clOrdId"].(string); ok {
-				log.Printf("[DEBUG] Found client order ID: %s", clOrdID)
-				signalID := p.findSignalIDByClOrdID(clOrdID)
-				if signalID != "" {
-					log.Printf("[DEBUG] Found associated signal ID: %s", signalID)
-					if err := p.mongoClient.UpdateSignalWithOrderID(signalID, ordID, clOrdID, "success"); err != nil {
-						log.Printf("[ERROR] Failed to update signal %s with order ID: %v", signalID, err)
+		// Get channel information from arg
+		channel := ""
+		if arg, ok := msg["arg"].(map[string]interface{}); ok {
+			if ch, ok := arg["channel"].(string); ok {
+				channel = ch
+			}
+		}
+
+		// Process based on channel
+		switch channel {
+		case "orders":
+			return p.handleOrderData(data)
+		case "positions":
+			return p.handlePositionData(data)
+		default:
+			log.Printf("[INFO] Unknown channel: %s", channel)
+		}
+	}
+
+	return nil
+}
+
+// handleOrderData processes order channel data
+func (p *OrderProcessor) handleOrderData(data []interface{}) error {
+	for _, item := range data {
+		if order, ok := item.(map[string]interface{}); ok {
+			// Parse order ID
+			ordID := ""
+			if id, ok := order["ordId"].(string); ok {
+				ordID = id
+			} else if idFloat, ok := order["ordId"].(float64); ok {
+				ordID = fmt.Sprintf("%.0f", idFloat)
+			}
+
+			if ordID != "" {
+				log.Printf("[DEBUG] Processing order: %s", ordID)
+				p.orderIDMap.Store(ordID, order)
+
+				// Find associated signal by client order ID
+				if clOrdID, ok := order["clOrdId"].(string); ok {
+					log.Printf("[DEBUG] Found client order ID: %s", clOrdID)
+					signalID := p.findSignalIDByClOrdID(clOrdID)
+					if signalID != "" {
+						log.Printf("[DEBUG] Found associated signal ID: %s", signalID)
+						if err := p.mongoClient.UpdateSignalWithOrderID(signalID, ordID, clOrdID, "success"); err != nil {
+							log.Printf("[ERROR] Failed to update signal %s with order ID: %v", signalID, err)
+						}
 					}
 				}
 			}
 		}
 	}
+	return nil
+}
 
+// handlePositionData processes position channel data
+func (p *OrderProcessor) handlePositionData(data []interface{}) error {
+	for _, item := range data {
+		if position, ok := item.(map[string]interface{}); ok {
+			log.Printf("[DEBUG] Processing position data: %+v", position)
+			// TODO: Implement position processing logic
+		}
+	}
 	return nil
 }
 

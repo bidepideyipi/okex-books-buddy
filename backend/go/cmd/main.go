@@ -71,13 +71,17 @@ func main() {
 	 */
 	var wsClient *ws.PublicClient
 	if cfg.OKEX.EnablePublicWS {
-		wsClient = ConnectPublicWebSocket(cfg, obManager)
-		defer func() {
-			if wsClient != nil {
-				httpserver.SetWSHealthy(false)
+		var connectErr error
+		wsClient, connectErr = ConnectPublicWebSocket(cfg, obManager)
+		if connectErr != nil {
+			log.Printf("Failed to connect to Public WebSocket: %v", connectErr)
+		} else if wsClient != nil {
+			httpserver.SetPublicWSHealthy(true)
+			defer func() {
+				httpserver.SetPublicWSHealthy(false)
 				wsClient.Close()
-			}
-		}()
+			}()
+		}
 	} else {
 		log.Println("Public WebSocket is disabled, skipping connection")
 	}
@@ -87,9 +91,16 @@ func main() {
 	 */
 	var businessWsClient *ws.BusinessClient
 	if mongoClient != nil && cfg.OKEX.EnableBusinessWS {
-		businessWsClient = ConnectBusinessWebSocket(cfg, mongoClient)
-		if businessWsClient != nil {
-			defer businessWsClient.Close()
+		var connectErr error
+		businessWsClient, connectErr = ConnectBusinessWebSocket(cfg, mongoClient)
+		if connectErr != nil {
+			log.Printf("Failed to connect to Business WebSocket: %v", connectErr)
+		} else if businessWsClient != nil {
+			httpserver.SetBusinessWSHealthy(true)
+			defer func() {
+				httpserver.SetBusinessWSHealthy(false)
+				businessWsClient.Close()
+			}()
 		}
 	} else if mongoClient != nil {
 		log.Println("Business WebSocket is disabled, skipping connection")
@@ -100,9 +111,16 @@ func main() {
 	 */
 	var privateWsClient *ws.PrivateClient
 	if mongoClient != nil && cfg.OKEX.EnablePrivateWS {
-		privateWsClient = ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
-		if privateWsClient != nil {
-			defer privateWsClient.Close()
+		var connectErr error
+		privateWsClient, connectErr = ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
+		if connectErr != nil {
+			log.Printf("Failed to connect to Private WebSocket: %v", connectErr)
+		} else if privateWsClient != nil {
+			httpserver.SetPrivateWSHealthy(true)
+			defer func() {
+				httpserver.SetPrivateWSHealthy(false)
+				privateWsClient.Close()
+			}()
 
 			if cfg.OKEX.EnablePrivateWS {
 				signalservice.StartSignalConsumer(redisClient, mongoClient, privateWsClient)

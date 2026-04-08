@@ -8,3 +8,4 @@ backend/go/cmd/__debug_bin1866509822
 config/app.env
 bin/*
 backend/go/bin/*
+backend/go/bin/okex-buddy
