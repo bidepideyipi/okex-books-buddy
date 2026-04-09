@@ -79,81 +79,8 @@ func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err 
 	return clOrdID, "", nil
 }
 
-// HandleOrderResponse handles order response from WebSocket
-func (p *OrderProcessor) HandleOrderResponse(message []byte) error {
-
-	log.Printf("[Priavte channel] Received order response %s", string(message))
-
-	var msg map[string]interface{}
-	if err := json.Unmarshal(message, &msg); err != nil {
-		log.Printf("[ERROR] Failed to unmarshal order response: %v", err)
-		return err
-	}
-
-	// Check if it's an event notification
-	if event, ok := msg["event"].(string); ok {
-		switch event {
-		case "channel-conn-count":
-			log.Printf("[INFO] Channel connection count notification")
-		case "subscribe":
-			if arg, ok := msg["arg"].(map[string]interface{}); ok {
-				if channel, ok := arg["channel"].(string); ok {
-					log.Printf("[INFO] Subscribe successful: channel=%s", channel)
-				}
-			}
-		case "unsubscribe":
-			if arg, ok := msg["arg"].(map[string]interface{}); ok {
-				if channel, ok := arg["channel"].(string); ok {
-					log.Printf("[INFO] Unsubscribe successful: channel=%s", channel)
-				}
-			}
-		case "error":
-			log.Printf("[ERROR] Event error: %v", msg)
-		default:
-			log.Printf("[INFO] Unknown event: %s", event)
-		}
-		return nil
-	}
-
-	// Check if it's an order operation response
-	if op, ok := msg["op"].(string); ok && op == "order" {
-		if code, ok := msg["code"].(string); ok {
-			if code == "0" {
-				log.Printf("[INFO] Order operation successful")
-			} else {
-				msgText, _ := msg["msg"].(string)
-				log.Printf("[ERROR] Order operation failed: code=%s, msg=%s", code, msgText)
-			}
-		}
-		return nil
-	}
-
-	// Check if it's data notification
-	if data, ok := msg["data"].([]interface{}); ok && len(data) > 0 {
-		// Get channel information from arg
-		channel := ""
-		if arg, ok := msg["arg"].(map[string]interface{}); ok {
-			if ch, ok := arg["channel"].(string); ok {
-				channel = ch
-			}
-		}
-
-		// Process based on channel
-		switch channel {
-		case "orders":
-			return p.handleOrderData(data)
-		case "positions":
-			return p.handlePositionData(data)
-		default:
-			log.Printf("[INFO] Unknown channel: %s", channel)
-		}
-	}
-
-	return nil
-}
-
 // handleOrderData processes order channel data
-func (p *OrderProcessor) handleOrderData(data []interface{}) error {
+func (p *OrderProcessor) HandleOrderEvent(data []interface{}) error {
 	for _, item := range data {
 		if order, ok := item.(map[string]interface{}); ok {
 			// Parse order ID
@@ -186,13 +113,13 @@ func (p *OrderProcessor) handleOrderData(data []interface{}) error {
 }
 
 // handlePositionData processes position channel data
-func (p *OrderProcessor) handlePositionData(data []interface{}) error {
-	for _, item := range data {
-		if position, ok := item.(map[string]interface{}); ok {
-			log.Printf("[DEBUG] Processing position data: %+v", position)
-			// TODO: Implement position processing logic
-		}
-	}
+func (p *OrderProcessor) HandlePositionEvent(data []interface{}) error {
+	//for _, item := range data {
+	//if position, ok := item.(map[string]interface{}); ok {
+	//log.Printf("[DEBUG] Processing position data: %+v", position)
+	// TODO: Implement position processing logic
+	//}
+	//}
 	return nil
 }
 

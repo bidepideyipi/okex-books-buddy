@@ -11,23 +11,23 @@ import (
 	"github.com/supermancell/okex-buddy/internal/signal"
 )
 
-// NewPrivateMessageHandler creates a message handler for private WebSocket
+/**
+ * NewPrivateMessageHandler creates a message handler for private WebSocket
+ * @description Processes private WebSocket messages
+ * @param mongoClient MongoDB client for inserting orders and positions
+ * @param orderProcessor Order processor
+ */
 func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signal.OrderProcessor) common.MessageHandler {
 	return func(msg []byte) error {
-		if err := handlePrivateMessage(mongoClient, msg); err != nil {
-			log.Printf("Failed to handle private message: %v", err)
+		//在这里写入了数据 到 MongoDB
+		if err := saveMessage(mongoClient, msg); err != nil {
 			return err
 		}
 
+		//在这里处理了事件
 		if orderProcessor != nil {
-			if err := orderProcessor.HandleOrderResponse(msg); err != nil {
-				if err.Error() != "order ID not found in message" {
-					log.Printf("Failed to handle order response: %v", err)
-				}
-			}
-
-			if err := orderProcessor.HandleErrorResponse(msg); err != nil {
-				log.Printf("Error in order response: %v", err)
+			if err := handleEvent(orderProcessor, msg); err != nil {
+				return err
 			}
 		}
 
@@ -35,8 +35,14 @@ func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signa
 	}
 }
 
-// handlePrivateMessage processes private WebSocket messages without creating a handler object
-func handlePrivateMessage(mongoClient *mongodb.Client, message []byte) error {
+/**
+ * saveMessage processes private WebSocket messages without creating a handler object
+ * @description Processes private WebSocket messages
+ * @param mongoClient MongoDB client for inserting orders and positions
+ * @param message Private WebSocket message
+ * @return error If insertion fails
+ */
+func saveMessage(mongoClient *mongodb.Client, message []byte) error {
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
 		return fmt.Errorf("failed to unmarshal message: %w", err)
@@ -59,9 +65,9 @@ func handlePrivateMessage(mongoClient *mongodb.Client, message []byte) error {
 
 	switch channel {
 	case "orders":
-		return handleOrders(mongoClient, data)
+		return saveOrders(mongoClient, data)
 	case "positions":
-		return handlePositions(mongoClient, data)
+		return savePositions(mongoClient, data)
 	default:
 		log.Printf("Unknown private channel: %s", channel)
 	}
@@ -69,8 +75,14 @@ func handlePrivateMessage(mongoClient *mongodb.Client, message []byte) error {
 	return nil
 }
 
-// handleOrders processes order channel data
-func handleOrders(mongoClient *mongodb.Client, data []interface{}) error {
+/**
+ * saveOrders processes order channel data
+ * @description Inserts orders into MongoDB
+ * @param mongoClient MongoDB client for inserting orders
+ * @param data Order channel data
+ * @return error If insertion fails
+ */
+func saveOrders(mongoClient *mongodb.Client, data []interface{}) error {
 	for _, item := range data {
 		orderMap, ok := item.(map[string]interface{})
 		if !ok {
@@ -193,8 +205,14 @@ func parseOrder(orderMap map[string]interface{}) (*mongodb.Order, error) {
 	return order, nil
 }
 
-// handlePositions processes position channel data
-func handlePositions(mongoClient *mongodb.Client, data []interface{}) error {
+/**
+ * savePositions processes position channel data
+ * @description Inserts positions into MongoDB
+ * @param mongoClient MongoDB client for inserting positions
+ * @param data Position channel data
+ * @return error If insertion fails
+ */
+func savePositions(mongoClient *mongodb.Client, data []interface{}) error {
 	for _, item := range data {
 		posMap, ok := item.(map[string]interface{})
 		if !ok {
@@ -299,4 +317,63 @@ func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 	position.ID = fmt.Sprintf("%s_%s", position.InstID, position.PosID)
 
 	return position, nil
+}
+
+func handleEvent(orderProcessor *signal.OrderProcessor, message []byte) error {
+	var msg map[string]interface{}
+	if err := json.Unmarshal(message, &msg); err != nil {
+		return fmt.Errorf("failed to unmarshal message: %w", err)
+	}
+
+	if event, ok := msg["event"].(string); ok {
+		switch event {
+		case "channel-conn-count":
+			log.Printf("[INFO] %s", string(message))
+		case "subscribe":
+			if arg, ok := msg["arg"].(map[string]interface{}); ok {
+				if channel, ok := arg["channel"].(string); ok {
+					log.Printf("[INFO] Subscribe successful: channel=%s", channel)
+				}
+			}
+		case "unsubscribe":
+			if arg, ok := msg["arg"].(map[string]interface{}); ok {
+				if channel, ok := arg["channel"].(string); ok {
+					log.Printf("[INFO] Unsubscribe successful: channel=%s", channel)
+				}
+			}
+		case "error":
+			//TODO Test error response
+			log.Printf("[ERROR] Event error: %v", msg)
+			orderProcessor.HandleErrorResponse(message)
+		default:
+			log.Printf("[WARNING] Unknown event: %s", event)
+		}
+		return nil
+	}
+
+	arg, ok := msg["arg"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	channel, ok := arg["channel"].(string)
+	if !ok {
+		return nil
+	}
+
+	data, ok := msg["data"].([]interface{})
+	if !ok {
+		return nil
+	}
+
+	switch channel {
+	case "orders":
+		return orderProcessor.HandleOrderEvent(data)
+	case "positions":
+		return orderProcessor.HandlePositionEvent(data)
+	default:
+		log.Printf("Unknown private channel: %s", channel)
+	}
+
+	return nil
 }

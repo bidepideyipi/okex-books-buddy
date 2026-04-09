@@ -156,8 +156,6 @@ func main() {
 		}
 		defer subManager.Stop()
 		log.Printf("Subscription manager started (polling every %d seconds)", cfg.Redis.PollIntervalSec)
-	} else {
-		log.Println("Subscription manager skipped because Public WebSocket is disabled")
 	}
 
 	httpServerDone := make(chan struct{})

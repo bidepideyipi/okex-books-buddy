@@ -13,7 +13,9 @@ import (
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
-// ConnectPublicWebSocket connects to the public WebSocket endpoint
+/**
+* ConnectPublicWebSocket connects to the public WebSocket endpoint
+ */
 func ConnectPublicWebSocket(cfg config.AppConfig, obManager *orderbook.Manager) (*ws.PublicClient, error) {
 	log.Printf("Public WebSocket is enabled, connecting to: %s", cfg.OKEX.PublicWSURL)
 	messageHandler := handler.NewPublicMessageHandler(obManager)

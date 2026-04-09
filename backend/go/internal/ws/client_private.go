@@ -166,7 +166,7 @@ func (c *PrivateClient) Login() error {
 		return fmt.Errorf("failed to send login message: %w", err)
 	}
 
-	log.Printf("Private WebSocket login request sent")
+	//log.Printf("Private WebSocket login request sent")
 
 	select {
 	case success := <-c.loginSuccess:
@@ -339,7 +339,7 @@ func (c *PrivateClient) Subscribe(params interface{}) error {
 	}
 	c.subscribedMu.Unlock()
 
-	log.Printf("Subscribed to private channels: %v", channels)
+	//log.Printf("Subscribed to private channels: %v", channels)
 	return nil
 }
 
@@ -480,7 +480,7 @@ func (c *PrivateClient) startPingPong() {
 				log.Printf("Failed to send ping on private WebSocket: %v", err)
 				return
 			}
-			log.Printf("[DEBUG] Private WebSocket ping sent")
+			//log.Printf("[DEBUG] Private WebSocket ping sent")
 		}
 	}
 }

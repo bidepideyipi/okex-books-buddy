@@ -3,9 +3,8 @@
     "go.alternateTools": {
         "go": "/usr/local/opt/go@1.23/bin/go",
         "gopls": "/usr/local/opt/go@1.23/bin/gopls",
-        "dlv": "/Users/anthony/go/bin/dlv"
+        "dlv": "/usr/local/bin/dlv"
     },
-    "go.buildOnSave": "off",
     "go.useLanguageServer": true,
     "go.lintOnSave": "workspace",
     "go.vetOnSave": "workspace",

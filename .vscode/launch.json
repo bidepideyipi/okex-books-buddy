@@ -18,14 +18,14 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/backend/go/cmd",
-            "buildFlags": [
-                "-gcflags=all=-N -l",
-                "-ldflags=all=-compressdwarf=false"
-            ],
-            "dlvFlags": [
-                "--check-go-version=false"
-            ],
+            "program": "${workspaceFolder}/backend/go",
+            // "buildFlags": [
+            //     "-gcflags=all=-N -l",
+            //     "-ldflags=all=-compressdwarf=false"
+            // ],
+            // "dlvFlags": [
+            //     "--check-go-version=false"
+            // ],
             "envFile": "${workspaceFolder}/config/app.env",
             "env": {
                 "PATH": "/usr/local/opt/go@1.23/bin:/usr/local/opt/go@1.23/libexec/bin:${env:PATH}",
