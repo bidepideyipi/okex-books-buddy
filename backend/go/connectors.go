@@ -91,7 +91,8 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 	}
 
 	orderProcessor := signal.NewOrderProcessor(nil, mongoClient)
-	msgHandler := handler.NewPrivateMessageHandler(mongoClient, orderProcessor)
+	postionProcessor := signal.NewPositionProcessor(nil)
+	msgHandler := handler.NewPrivateMessageHandler(mongoClient, orderProcessor, postionProcessor)
 
 	var privateClient *ws.PrivateClient
 	if cfg.OKEX.UseProxy {
@@ -101,6 +102,7 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 	}
 
 	orderProcessor = signal.NewOrderProcessor(privateClient, mongoClient)
+	postionProcessor = signal.NewPositionProcessor(privateClient)
 
 	if err := privateClient.Connect(); err != nil {
 		log.Printf("Failed to connect to Private WebSocket: %v", err)

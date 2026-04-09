@@ -81,6 +81,7 @@ func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err 
 
 // handleOrderData processes order channel data
 func (p *OrderProcessor) HandleOrderEvent(data []interface{}) error {
+	log.Printf("[DEBUG] Processing order data: %+v", data)
 	for _, item := range data {
 		if order, ok := item.(map[string]interface{}); ok {
 			// Parse order ID

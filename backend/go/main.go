@@ -87,6 +87,34 @@ func main() {
 	}
 
 	/**
+	 * a.创建一个可取消的上下文
+	 * b.创建订单薄处理器
+	 * c. SubscriptionManager订阅管理
+	 */
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if wsClient != nil {
+		go orderbook.StartOrderBookProcessor(ctx, wsClient, obManager, redisClient, cfg)
+	}
+
+	var subManager *subscription.SubscriptionManager
+	if wsClient != nil {
+		subManager = subscription.NewSubscriptionManager(
+			wsClient,
+			redisClient,
+			cfg.Redis.TradingPairsKey,
+			cfg.Redis.PollIntervalSec,
+		)
+
+		if err := subManager.Start(); err != nil {
+			log.Fatalf("Failed to start subscription manager: %v", err)
+		}
+		defer subManager.Stop()
+		log.Printf("Subscription manager started (polling every %d seconds)", cfg.Redis.PollIntervalSec)
+	}
+
+	/**
 	 * 连接到 Business WebSocket
 	 */
 	var businessWsClient *ws.BusinessClient
@@ -123,6 +151,7 @@ func main() {
 			}()
 
 			if cfg.OKEX.EnablePrivateWS {
+				//开启交易型号接收器
 				signalservice.StartSignalConsumer(redisClient, mongoClient, privateWsClient)
 			}
 		}
@@ -131,37 +160,15 @@ func main() {
 	}
 
 	/**
-	 * a.创建一个可取消的上下文
-	 * b.创建订单薄处理器
-	 * c. SubscriptionManager订阅管理
+	* Http接口开放
 	 */
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if wsClient != nil {
-		go orderbook.StartOrderBookProcessor(ctx, wsClient, obManager, redisClient, cfg)
-	}
-
-	var subManager *subscription.SubscriptionManager
-	if wsClient != nil {
-		subManager = subscription.NewSubscriptionManager(
-			wsClient,
-			redisClient,
-			cfg.Redis.TradingPairsKey,
-			cfg.Redis.PollIntervalSec,
-		)
-
-		if err := subManager.Start(); err != nil {
-			log.Fatalf("Failed to start subscription manager: %v", err)
-		}
-		defer subManager.Stop()
-		log.Printf("Subscription manager started (polling every %d seconds)", cfg.Redis.PollIntervalSec)
-	}
-
 	httpServerDone := make(chan struct{})
 	httpServerStop := make(chan struct{})
 	go httpserver.StartHTTPServer(cfg.APIHTTPAddr, httpServerDone, httpServerStop)
 
+	/**
+	* 处理停机信号
+	 */
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 

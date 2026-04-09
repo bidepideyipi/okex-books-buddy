@@ -72,6 +72,7 @@ type Position struct {
 	PosID       string `bson:"pos_id"`
 	PosSide     string `bson:"pos_side"`
 	Pos         string `bson:"pos"`
+	AvailPos    string `bson:"avail_pos"`
 	BaseBal     string `bson:"base_bal"`
 	QuoteBal    string `bson:"quote_bal"`
 	PosCcy      string `bson:"pos_ccy"`
@@ -87,6 +88,7 @@ type Position struct {
 	NotionalUSD string `bson:"notional_usd"`
 	Last        string `bson:"last"`
 	Timestamp   int64  `bson:"timestamp"`
+	Active      int    `bson:"active"`
 }
 
 // TradingSignal represents a trading signal

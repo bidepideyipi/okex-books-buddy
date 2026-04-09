@@ -17,7 +17,7 @@ import (
  * @param mongoClient MongoDB client for inserting orders and positions
  * @param orderProcessor Order processor
  */
-func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signal.OrderProcessor) common.MessageHandler {
+func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signal.OrderProcessor, postionProcessor *signal.PositionProcessor) common.MessageHandler {
 	return func(msg []byte) error {
 		//在这里写入了数据 到 MongoDB
 		if err := saveMessage(mongoClient, msg); err != nil {
@@ -25,8 +25,8 @@ func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signa
 		}
 
 		//在这里处理了事件
-		if orderProcessor != nil {
-			if err := handleEvent(orderProcessor, msg); err != nil {
+		if orderProcessor != nil && postionProcessor != nil {
+			if err := handleEvent(orderProcessor, postionProcessor, msg); err != nil {
 				return err
 			}
 		}
@@ -213,6 +213,8 @@ func parseOrder(orderMap map[string]interface{}) (*mongodb.Order, error) {
  * @return error If insertion fails
  */
 func savePositions(mongoClient *mongodb.Client, data []interface{}) error {
+	positions, _ := mongoClient.GetActivePositions()
+
 	for _, item := range data {
 		posMap, ok := item.(map[string]interface{})
 		if !ok {
@@ -225,10 +227,26 @@ func savePositions(mongoClient *mongodb.Client, data []interface{}) error {
 			continue
 		}
 
+		//写入DB
 		if err := mongoClient.InsertPosition(pos); err != nil {
 			log.Printf("Failed to insert position: %v", err)
 		}
+
+		//排除当前确实是Active的Position
+		for i, dbPos := range positions {
+			if pos.PosID == dbPos.PosID {
+				// 用最后一个元素替换当前元素
+				positions[i] = positions[len(positions)-1]
+				positions = positions[:len(positions)-1]
+			}
+		}
 	}
+
+	//排除后的就是!Active的Position
+	for _, dbPos := range positions {
+		mongoClient.SoftDeletePosition(dbPos.InstID, dbPos.PosID)
+	}
+
 	return nil
 }
 
@@ -256,6 +274,10 @@ func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 
 	if pos, ok := posMap["pos"].(string); ok {
 		position.Pos = pos
+	}
+
+	if availPos, ok := posMap["availPos"].(string); ok {
+		position.AvailPos = availPos
 	}
 
 	if baseBal, ok := posMap["baseBal"].(string); ok {
@@ -319,7 +341,8 @@ func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 	return position, nil
 }
 
-func handleEvent(orderProcessor *signal.OrderProcessor, message []byte) error {
+func handleEvent(orderProcessor *signal.OrderProcessor, postionProcessor *signal.PositionProcessor, message []byte) error {
+	//log.Printf("[INFO] %s", string(message))
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
 		return fmt.Errorf("failed to unmarshal message: %w", err)
@@ -370,7 +393,7 @@ func handleEvent(orderProcessor *signal.OrderProcessor, message []byte) error {
 	case "orders":
 		return orderProcessor.HandleOrderEvent(data)
 	case "positions":
-		return orderProcessor.HandlePositionEvent(data)
+		return postionProcessor.HandleEvent(data)
 	default:
 		log.Printf("Unknown private channel: %s", channel)
 	}
