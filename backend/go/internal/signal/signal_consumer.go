@@ -225,7 +225,7 @@ func StartSignalConsumer(redisClient *redisclient.Client, mongoClient *mongodb.C
 	strategies := []string{"momentum_strategy"}
 	consumer := NewSignalConsumer(redisClient.Client(), mongoClient, strategies)
 
-	orderProcessor := NewOrderProcessor(privateClient, mongoClient)
+	orderProcessor := NewOrderProcessor(privateClient)
 	consumer.SetOrderCallback(func(sig *Signal) (string, string, error) {
 		return orderProcessor.PlaceOrder(sig)
 	})

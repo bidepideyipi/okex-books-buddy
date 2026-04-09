@@ -149,7 +149,7 @@ func LoadFromEnv() AppConfig {
 			LiquidityShrinkLongWindowSeconds:     getenvIntWithDefault("LIQUIDITY_SHRINK_LONG_WINDOW_SECONDS", 1800),
 			LiquidityShrinkSlopeThreshold:        getenvFloat64WithDefault("LIQUIDITY_SHRINK_SLOPE_THRESHOLD", -0.01),
 		},
-		APIHTTPAddr:       getenvWithDefault("API_HTTP_ADDR", "0.0.0.0:8080"),
+		APIHTTPAddr:       getenvWithDefault("API_HTTP_ADDR", "0.0.0.0:8088"),
 		FrontendDevServer: os.Getenv("FRONTEND_DEV_SERVER"),
 	}
 }

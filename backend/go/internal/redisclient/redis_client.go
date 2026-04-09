@@ -21,7 +21,7 @@ func NewClient(addr, password string) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
-		DB:       0,
+		DB:       1,
 	})
 
 	ctx := context.Background()

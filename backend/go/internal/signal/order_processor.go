@@ -8,14 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
 // OrderProcessor handles placing orders based on trading signals
 type OrderProcessor struct {
 	privateClient *ws.PrivateClient
-	mongoClient   *mongodb.Client
 	ctx           context.Context
 	cancel        context.CancelFunc
 	orderIDMap    sync.Map
@@ -23,11 +21,10 @@ type OrderProcessor struct {
 }
 
 // NewOrderProcessor creates a new order processor
-func NewOrderProcessor(privateClient *ws.PrivateClient, mongoClient *mongodb.Client) *OrderProcessor {
+func NewOrderProcessor(privateClient *ws.PrivateClient) *OrderProcessor {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &OrderProcessor{
 		privateClient: privateClient,
-		mongoClient:   mongoClient,
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -80,36 +77,8 @@ func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err 
 }
 
 // handleOrderData processes order channel data
-func (p *OrderProcessor) HandleOrderEvent(data []interface{}) error {
+func (p *OrderProcessor) HandleEvent(data []interface{}) error {
 	log.Printf("[DEBUG] Processing order data: %+v", data)
-	for _, item := range data {
-		if order, ok := item.(map[string]interface{}); ok {
-			// Parse order ID
-			ordID := ""
-			if id, ok := order["ordId"].(string); ok {
-				ordID = id
-			} else if idFloat, ok := order["ordId"].(float64); ok {
-				ordID = fmt.Sprintf("%.0f", idFloat)
-			}
-
-			if ordID != "" {
-				log.Printf("[DEBUG] Processing order: %s", ordID)
-				p.orderIDMap.Store(ordID, order)
-
-				// Find associated signal by client order ID
-				if clOrdID, ok := order["clOrdId"].(string); ok {
-					log.Printf("[DEBUG] Found client order ID: %s", clOrdID)
-					signalID := p.findSignalIDByClOrdID(clOrdID)
-					if signalID != "" {
-						log.Printf("[DEBUG] Found associated signal ID: %s", signalID)
-						if err := p.mongoClient.UpdateSignalWithOrderID(signalID, ordID, clOrdID, "success"); err != nil {
-							log.Printf("[ERROR] Failed to update signal %s with order ID: %v", signalID, err)
-						}
-					}
-				}
-			}
-		}
-	}
 	return nil
 }
 

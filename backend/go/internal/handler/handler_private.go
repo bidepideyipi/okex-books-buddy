@@ -99,6 +99,35 @@ func saveOrders(mongoClient *mongodb.Client, data []interface{}) error {
 			log.Printf("Failed to insert order: %v", err)
 		}
 	}
+
+	// for _, item := range data {
+	// 	if order, ok := item.(map[string]interface{}); ok {
+	// 		// Parse order ID
+	// 		ordID := ""
+	// 		if id, ok := order["ordId"].(string); ok {
+	// 			ordID = id
+	// 		} else if idFloat, ok := order["ordId"].(float64); ok {
+	// 			ordID = fmt.Sprintf("%.0f", idFloat)
+	// 		}
+
+	// 		if ordID != "" {
+	// 			log.Printf("[DEBUG] Processing order: %s", ordID)
+	// 			orderIDMap.Store(ordID, order)
+
+	// 			// Find associated signal by client order ID
+	// 			if clOrdID, ok := order["clOrdId"].(string); ok {
+	// 				log.Printf("[DEBUG] Found client order ID: %s", clOrdID)
+	// 				signalID := findSignalIDByClOrdID(clOrdID)
+	// 				if signalID != "" {
+	// 					log.Printf("[DEBUG] Found associated signal ID: %s", signalID)
+	// 					if err := mongoClient.UpdateSignalWithOrderID(signalID, ordID, clOrdID, "success"); err != nil {
+	// 						log.Printf("[ERROR] Failed to update signal %s with order ID: %v", signalID, err)
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
 	return nil
 }
 
@@ -391,7 +420,7 @@ func handleEvent(orderProcessor *signal.OrderProcessor, postionProcessor *signal
 
 	switch channel {
 	case "orders":
-		return orderProcessor.HandleOrderEvent(data)
+		return orderProcessor.HandleEvent(data)
 	case "positions":
 		return postionProcessor.HandleEvent(data)
 	default:

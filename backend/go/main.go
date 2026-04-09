@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/supermancell/okex-buddy/internal/config"
+	connect "github.com/supermancell/okex-buddy/internal/connector"
 	httpserver "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
@@ -72,7 +73,7 @@ func main() {
 	var wsClient *ws.PublicClient
 	if cfg.OKEX.EnablePublicWS {
 		var connectErr error
-		wsClient, connectErr = ConnectPublicWebSocket(cfg, obManager)
+		wsClient, connectErr = connect.ConnectPublicWebSocket(cfg, obManager)
 		if connectErr != nil {
 			log.Printf("Failed to connect to Public WebSocket: %v", connectErr)
 		} else if wsClient != nil {
@@ -120,7 +121,7 @@ func main() {
 	var businessWsClient *ws.BusinessClient
 	if mongoClient != nil && cfg.OKEX.EnableBusinessWS {
 		var connectErr error
-		businessWsClient, connectErr = ConnectBusinessWebSocket(cfg, mongoClient)
+		businessWsClient, connectErr = connect.ConnectBusinessWebSocket(cfg, mongoClient)
 		if connectErr != nil {
 			log.Printf("Failed to connect to Business WebSocket: %v", connectErr)
 		} else if businessWsClient != nil {
@@ -140,7 +141,7 @@ func main() {
 	var privateWsClient *ws.PrivateClient
 	if mongoClient != nil && cfg.OKEX.EnablePrivateWS {
 		var connectErr error
-		privateWsClient, connectErr = ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
+		privateWsClient, connectErr = connect.ConnectPrivateWebSocket(cfg, mongoClient, redisClient)
 		if connectErr != nil {
 			log.Printf("Failed to connect to Private WebSocket: %v", connectErr)
 		} else if privateWsClient != nil {
@@ -153,6 +154,7 @@ func main() {
 			if cfg.OKEX.EnablePrivateWS {
 				//开启交易型号接收器
 				signalservice.StartSignalConsumer(redisClient, mongoClient, privateWsClient)
+				signalservice.StartStreamConsumer(redisClient, mongoClient)
 			}
 		}
 	} else if mongoClient != nil {

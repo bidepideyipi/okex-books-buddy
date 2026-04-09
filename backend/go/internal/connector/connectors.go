@@ -1,4 +1,4 @@
-package main
+package connector
 
 import (
 	"log"
@@ -90,7 +90,7 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 		Passphrase: passphrase,
 	}
 
-	orderProcessor := signal.NewOrderProcessor(nil, mongoClient)
+	orderProcessor := signal.NewOrderProcessor(nil)
 	postionProcessor := signal.NewPositionProcessor(nil)
 	msgHandler := handler.NewPrivateMessageHandler(mongoClient, orderProcessor, postionProcessor)
 
@@ -101,7 +101,7 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 		privateClient = ws.NewPrivateClient(cfg.OKEX.PrivateWSURL, msgHandler, privateConfig)
 	}
 
-	orderProcessor = signal.NewOrderProcessor(privateClient, mongoClient)
+	orderProcessor = signal.NewOrderProcessor(privateClient)
 	postionProcessor = signal.NewPositionProcessor(privateClient)
 
 	if err := privateClient.Connect(); err != nil {
