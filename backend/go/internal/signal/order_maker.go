@@ -9,17 +9,33 @@ import (
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
+// PrivateClientInterface defines the interface for private client operations
+type PrivateClientInterface interface {
+	IsAuthenticated() bool
+	PlaceOrder(args []map[string]string) error
+}
+
 // OrderProcessor handles placing orders based on trading signals
 type OrderProcessor struct {
-	privateClient *ws.PrivateClient
+	privateClient PrivateClientInterface
 	ctx           context.Context
 	cancel        context.CancelFunc
 	orderIDMap    sync.Map
 	clOrdIDMap    sync.Map
 }
 
-// NewOrderProcessor creates a new order processor
-func NewOrderProcessor(privateClient *ws.PrivateClient) *OrderProcessor {
+// NewOrderMaker creates a new order maker
+func NewOrderMaker(privateClient *ws.PrivateClient) *OrderProcessor {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &OrderProcessor{
+		privateClient: privateClient,
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+}
+
+// NewOrderMakerWithInterface creates a new order maker with interface (for testing)
+func NewOrderMakerWithInterface(privateClient PrivateClientInterface) *OrderProcessor {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &OrderProcessor{
 		privateClient: privateClient,

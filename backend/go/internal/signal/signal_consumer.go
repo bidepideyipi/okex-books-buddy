@@ -146,10 +146,10 @@ func (c *SignalConsumer) GetSignalStatus(signalID string) (string, error) {
 func StartSignalConsumer(redisClient *redisclient.Client, mongoClient *mongodb.Client, privateClient *ws.PrivateClient) {
 	consumer := NewSignalConsumer(redisClient.Client(), mongoClient)
 
-	orderProcessor := NewOrderProcessor(privateClient)
+	orderMaker := NewOrderMaker(privateClient)
 	consumer.SetOrderCallback(func(sig *Signal) (string, string, error) {
 		//看到了这里
-		return orderProcessor.PlaceOrder(sig)
+		return orderMaker.PlaceOrder(sig)
 	})
 
 	go consumer.Start()

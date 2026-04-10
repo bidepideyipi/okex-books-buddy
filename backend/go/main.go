@@ -55,14 +55,16 @@ func main() {
 		mongoClient, err = mongodb.NewClient(cfg.MongoDB.Addr, cfg.MongoDB.Database)
 		if err != nil {
 			log.Printf("Failed to connect to MongoDB: %v", err)
-		} else {
-			defer func() {
-				if err := mongoClient.Close(); err != nil {
-					log.Printf("Failed to close MongoDB client: %v", err)
-				}
-			}()
-			log.Println("Connected to MongoDB")
-		}
+			return
+		} 
+		
+		defer func() {
+			if err := mongoClient.Close(); err != nil {
+				log.Printf("Failed to close MongoDB client: %v", err)
+			}
+		}()
+		log.Println("Connected to MongoDB")
+		
 	}
 
 	obManager := orderbook.NewManager()
