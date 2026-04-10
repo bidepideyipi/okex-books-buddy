@@ -11,32 +11,6 @@ import (
 	"github.com/supermancell/okex-buddy/internal/redisclient"
 )
 
-const (
-	STREAM_KEY    = "signals"
-	GROUP_NAME    = "gp-go"
-	CONSUMER_NAME = "consumer-go"
-)
-
-// StreamSignal represents a signal from Redis Stream
-type StreamSignal struct {
-	Timestamp           string
-	InstID              string
-	Bar                 string
-	Prediction          string
-	PredictionLabel     string
-	PredictionHigh      string
-	PredictionHighLabel string
-	PredictionLow       string
-	PredictionLowLabel  string
-	Probabilities       string
-	ProbabilitiesHigh   string
-	ProbabilitiesLow    string
-	FeaturesCount       string
-	Price               string
-	Line1               string
-	Line2               string
-}
-
 // StreamConsumer consumes signals from Redis Stream
 type StreamConsumer struct {
 	redisClient    *redis.Client

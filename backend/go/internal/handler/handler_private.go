@@ -8,7 +8,6 @@ import (
 
 	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
-	"github.com/supermancell/okex-buddy/internal/signal"
 )
 
 /**
@@ -17,7 +16,7 @@ import (
  * @param mongoClient MongoDB client for inserting orders and positions
  * @param orderProcessor Order processor
  */
-func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *signal.OrderProcessor, postionProcessor *signal.PositionProcessor) common.MessageHandler {
+func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *OrderProcessor, postionProcessor *PositionProcessor) common.MessageHandler {
 	return func(msg []byte) error {
 		//在这里写入了数据 到 MongoDB
 		if err := saveMessage(mongoClient, msg); err != nil {
@@ -370,7 +369,7 @@ func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 	return position, nil
 }
 
-func handleEvent(orderProcessor *signal.OrderProcessor, postionProcessor *signal.PositionProcessor, message []byte) error {
+func handleEvent(orderProcessor *OrderProcessor, postionProcessor *PositionProcessor, message []byte) error {
 	//log.Printf("[INFO] %s", string(message))
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
