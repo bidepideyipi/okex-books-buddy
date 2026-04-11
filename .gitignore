@@ -9,3 +9,5 @@ config/app.env
 bin/*
 backend/go/bin/*
 backend/go/bin/okex-buddy
+__debug_bin*
+debug.*
