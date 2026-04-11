@@ -9,7 +9,6 @@ import (
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/orderbook"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
-	"github.com/supermancell/okex-buddy/internal/signal"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
@@ -74,6 +73,7 @@ func ConnectBusinessWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client)
 }
 
 // ConnectPrivateWebSocket connects to OKEx private WebSocket
+// Deprecated: 该方法已被LoadPrivateWs方法替换
 func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, redisClient *redisclient.Client) (*ws.PrivateClient, error) {
 	log.Println("Connecting to Private WebSocket...")
 
@@ -90,8 +90,8 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 		Passphrase: passphrase,
 	}
 
-	orderProcessor := signal.NewOrderProcessor(nil)
-	postionProcessor := signal.NewPositionProcessor(nil)
+	orderProcessor := handler.NewOrderProcessor(nil)
+	postionProcessor := handler.NewPositionProcessor(nil)
 	msgHandler := handler.NewPrivateMessageHandler(mongoClient, orderProcessor, postionProcessor)
 
 	var privateClient *ws.PrivateClient
@@ -101,8 +101,8 @@ func ConnectPrivateWebSocket(cfg config.AppConfig, mongoClient *mongodb.Client, 
 		privateClient = ws.NewPrivateClient(cfg.OKEX.PrivateWSURL, msgHandler, privateConfig)
 	}
 
-	orderProcessor = signal.NewOrderProcessor(privateClient)
-	postionProcessor = signal.NewPositionProcessor(privateClient)
+	orderProcessor = handler.NewOrderProcessor(privateClient)
+	postionProcessor = handler.NewPositionProcessor(privateClient)
 
 	if err := privateClient.Connect(); err != nil {
 		log.Printf("Failed to connect to Private WebSocket: %v", err)

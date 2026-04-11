@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
@@ -45,7 +46,7 @@ func NewOrderMakerWithInterface(privateClient PrivateClientInterface) *OrderProc
 }
 
 // PlaceOrder places an order based on trading signal
-func (p *OrderProcessor) PlaceOrder(signal *Signal) (clOrdID, ordID string, err error) {
+func (p *OrderProcessor) PlaceOrder(signal *common.Signal) (clOrdID, ordID string, err error) {
 	if !p.privateClient.IsAuthenticated() {
 		return "", "", fmt.Errorf("private client not authenticated")
 	}

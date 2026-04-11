@@ -1,12 +1,14 @@
-package signal
+package handler
 
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/supermancell/okex-buddy/internal/common"
 )
 
 // validateSignal validates the trading signal
-func (c *SignalConsumer) validateSignal(signal *Signal) error {
+func validateSignal(signal *common.Signal) error {
 	if signal.SignalID == "" {
 		return fmt.Errorf("signal_id is required")
 	}

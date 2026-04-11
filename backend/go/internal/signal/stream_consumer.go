@@ -7,26 +7,23 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/supermancell/okex-buddy/internal/mongodb"
-	"github.com/supermancell/okex-buddy/internal/redisclient"
+	"github.com/supermancell/okex-buddy/internal/common"
 )
 
 // StreamConsumer consumes signals from Redis Stream
 type StreamConsumer struct {
 	redisClient    *redis.Client
-	mongoClient    *mongodb.Client
 	timeout        time.Duration
 	ctx            context.Context
 	cancel         context.CancelFunc
-	signalCallback func(*StreamSignal) error
+	messageHandler common.StreamSignalHandler
 }
 
 // NewStreamConsumer creates a new stream consumer
-func NewStreamConsumer(redisClient *redis.Client, mongoClient *mongodb.Client) *StreamConsumer {
+func NewStreamConsumer(redisClient *redis.Client, messageHandler common.StreamSignalHandler) *StreamConsumer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &StreamConsumer{
 		redisClient: redisClient,
-		mongoClient: mongoClient,
 		timeout:     5 * time.Second,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -34,14 +31,14 @@ func NewStreamConsumer(redisClient *redis.Client, mongoClient *mongodb.Client) *
 }
 
 // SetSignalCallback sets the callback function for processing signals
-func (c *StreamConsumer) SetSignalCallback(callback func(*StreamSignal) error) {
-	c.signalCallback = callback
+func (c *StreamConsumer) SetMessageHandler(handler common.StreamSignalHandler) {
+	c.messageHandler = handler
 }
 
 // Start starts consuming signals from Redis Stream
 func (c *StreamConsumer) Start() {
-	log.Println("[INFO] Stream consumer starting, watching stream:", STREAM_KEY)
-	log.Println("[INFO] Consumer group:", GROUP_NAME, "Consumer name:", CONSUMER_NAME)
+	log.Println("[INFO] Stream consumer starting, watching stream:", common.STREAM_KEY)
+	log.Println("[INFO] Consumer group:", common.GROUP_NAME, "Consumer name:", common.CONSUMER_NAME)
 
 	// Create consumer group if it doesn't exist
 	if err := c.createConsumerGroup(); err != nil {
@@ -64,16 +61,16 @@ func (c *StreamConsumer) Stop() {
 
 // createConsumerGroup creates consumer group if it doesn't exist
 func (c *StreamConsumer) createConsumerGroup() error {
-	err := c.redisClient.XGroupCreateMkStream(c.ctx, STREAM_KEY, GROUP_NAME, "0").Err()
+	err := c.redisClient.XGroupCreateMkStream(c.ctx, common.STREAM_KEY, common.GROUP_NAME, "0").Err()
 	if err != nil {
 		// If group already exists, that's fine
 		if err.Error() == "BUSYGROUP Consumer Group name already exists" {
-			log.Printf("[INFO] Consumer group %s already exists", GROUP_NAME)
+			log.Printf("[INFO] Consumer group %s already exists", common.GROUP_NAME)
 			return nil
 		}
 		return err
 	}
-	log.Printf("[INFO] Created consumer group: %s", GROUP_NAME)
+	log.Printf("[INFO] Created consumer group: %s", common.GROUP_NAME)
 	return nil
 }
 
@@ -104,12 +101,12 @@ func (c *StreamConsumer) consumeStream() {
 			log.Println("[INFO] consumeStream loop stopped by context")
 			return
 		default:
-			log.Printf("[DEBUG] Attempting to read from stream group %s, consumer %s", GROUP_NAME, CONSUMER_NAME)
+			log.Printf("[DEBUG] Attempting to read from stream group %s, consumer %s", common.GROUP_NAME, common.CONSUMER_NAME)
 
 			streams, err := c.redisClient.XReadGroup(c.ctx, &redis.XReadGroupArgs{
-				Group:    GROUP_NAME,
-				Consumer: CONSUMER_NAME,
-				Streams:  []string{STREAM_KEY, ">"},
+				Group:    common.GROUP_NAME,
+				Consumer: common.CONSUMER_NAME,
+				Streams:  []string{common.STREAM_KEY, ">"},
 				Count:    10,
 				Block:    c.timeout,
 				NoAck:    false,
@@ -135,7 +132,7 @@ func (c *StreamConsumer) consumeStream() {
 						// Don't ack on error, will be retried
 					} else {
 						// Acknowledge message
-						if err := c.redisClient.XAck(c.ctx, STREAM_KEY, GROUP_NAME, message.ID).Err(); err != nil {
+						if err := c.redisClient.XAck(c.ctx, common.STREAM_KEY, common.GROUP_NAME, message.ID).Err(); err != nil {
 							log.Printf("[ERROR] Failed to acknowledge message %s: %v", message.ID, err)
 						}
 					}
@@ -150,7 +147,7 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 	// Print original message before type conversion
 	log.Printf("[DEBUG] Original message values: %+v", message.Values)
 
-	signal := &StreamSignal{
+	signal := &common.StreamSignal{
 		Timestamp:           getStringValue(message.Values["timestamp"]),
 		InstID:              getStringValue(message.Values["inst_id"]),
 		Bar:                 getStringValue(message.Values["bar"]),
@@ -176,8 +173,8 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 	log.Printf("[INFO] Stream signal received: id=%s, inst=%s, prediction=%s, price=%s",
 		message.ID, signal.InstID, signal.Prediction, signal.Price)
 
-	if c.signalCallback != nil {
-		if err := c.signalCallback(signal); err != nil {
+	if c.messageHandler != nil {
+		if err := c.messageHandler(signal); err != nil {
 			return fmt.Errorf("callback failed: %w", err)
 		}
 	}
@@ -186,7 +183,7 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 }
 
 // validateStreamSignal validates the stream signal
-func (c *StreamConsumer) validateStreamSignal(signal *StreamSignal) error {
+func (c *StreamConsumer) validateStreamSignal(signal *common.StreamSignal) error {
 	if signal.Timestamp == "" {
 		return fmt.Errorf("timestamp is required")
 	}
@@ -207,19 +204,11 @@ func (c *StreamConsumer) validateStreamSignal(signal *StreamSignal) error {
 }
 
 // StartStreamConsumer starts the stream signal consumer
-func StartStreamConsumer(redisClient *redisclient.Client, mongoClient *mongodb.Client) {
-	consumer := NewStreamConsumer(redisClient.Client(), mongoClient)
+func StartStreamConsumer(redisClient *redis.Client, messageHandler common.StreamSignalHandler) {
+	consumer := NewStreamConsumer(redisClient, messageHandler)
 
 	// Set callback function for processing signals
-	consumer.SetSignalCallback(func(sig *StreamSignal) error {
-		// Process the stream signal here
-		// Example: store in MongoDB, trigger trading logic, etc.
-		log.Printf("[INFO] Processing stream signal: inst=%s, prediction=%s, price=%s, bar=%s",
-			sig.InstID, sig.Prediction, sig.Price, sig.Bar)
-
-		// TODO: Add business logic here
-		return nil
-	})
+	consumer.SetMessageHandler(messageHandler)
 
 	go consumer.Start()
 

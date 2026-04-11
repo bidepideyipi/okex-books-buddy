@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/config"
 	connect "github.com/supermancell/okex-buddy/internal/connector"
 	httpserver "github.com/supermancell/okex-buddy/internal/http"
@@ -56,15 +57,15 @@ func main() {
 		if err != nil {
 			log.Printf("Failed to connect to MongoDB: %v", err)
 			return
-		} 
-		
+		}
+
 		defer func() {
 			if err := mongoClient.Close(); err != nil {
 				log.Printf("Failed to close MongoDB client: %v", err)
 			}
 		}()
 		log.Println("Connected to MongoDB")
-		
+
 	}
 
 	obManager := orderbook.NewManager()
@@ -155,8 +156,12 @@ func main() {
 
 			if cfg.OKEX.EnablePrivateWS {
 				//开启交易型号接收器
-				signalservice.StartSignalConsumer(redisClient, mongoClient, privateWsClient)
-				signalservice.StartStreamConsumer(redisClient, mongoClient)
+				signalservice.StartSignalConsumer(redisClient.Client(), func(msg []byte) error {
+					return nil
+				})
+				signalservice.StartStreamConsumer(redisClient.Client(), func(msg *common.StreamSignal) error {
+					return nil
+				})
 			}
 		}
 	} else if mongoClient != nil {
