@@ -10,7 +10,7 @@ import (
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 )
 
-func NewRedisListMessageHandler(mongoClient *mongodb.Client) common.MessageHandler {
+func NewRedisListMessageHandler(mongoClient *mongodb.Client, orderMaker *SignalOrderMaker) common.MessageHandler {
 	return func(msg []byte) error {
 		var signal common.Signal
 		if err := json.Unmarshal(msg, &signal); err != nil {
@@ -44,6 +44,20 @@ func NewRedisListMessageHandler(mongoClient *mongodb.Client) common.MessageHandl
 
 		log.Printf("Signal recorded: %s (inst=%s, side=%s, type=%s)",
 			signal.SignalID, signal.InstID, signal.Side, signal.OrdType)
+
+		clOrdID, ordID, err := orderMaker.PlaceOrder(&signal)
+		if err != nil {
+			log.Printf("Failed to place order for signal %s: %v", signal.SignalID, err)
+			mongoClient.UpdateSignalStatusWithError(signal.SignalID, "failed", err.Error())
+			return err
+		}
+
+		if err := mongoClient.UpdateSignalWithOrderID(signal.SignalID, ordID, clOrdID, "processing"); err != nil {
+			log.Printf("Failed to update signal with order ID: %v", err)
+			return err
+		}
+
+		log.Printf("Order placed for signal %s: clOrdID=%s, ordID=%s", signal.SignalID, clOrdID, ordID)
 		return nil
 	}
 }

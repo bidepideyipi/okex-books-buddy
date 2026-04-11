@@ -1,4 +1,4 @@
-package signal_test
+package handler_test
 
 import (
 	"log"
@@ -10,9 +10,10 @@ import (
 
 	"github.com/supermancell/okex-buddy/internal/assembly"
 	common "github.com/supermancell/okex-buddy/internal/common"
-	s "github.com/supermancell/okex-buddy/internal/signal"
+	"github.com/supermancell/okex-buddy/internal/handler"
 )
 
+// 下单是可以独立于handler_redis_list和signal_consumer被调用的，这是我想要的解耦效果
 func TestOrderMaker(t *testing.T) {
 	app := assembly.NewAssembly()
 	// 测试自定义消息处理函数, 实际应用中应根据需要实现消息处理逻辑
@@ -41,7 +42,7 @@ func TestOrderMaker(t *testing.T) {
 		t.Fatalf("PrivateClient is nil")
 	}
 
-	orderMaker := s.NewOrderMaker(app.PrivateClient)
+	orderMaker := handler.NewOrderMaker(app.PrivateClient)
 
 	clOrdID, ordID, err := orderMaker.PlaceOrder(&common.Signal{
 		SignalID: "test",

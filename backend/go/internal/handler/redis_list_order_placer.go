@@ -1,7 +1,6 @@
-package signal
+package handler
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -10,43 +9,22 @@ import (
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
-// PrivateClientInterface defines the interface for private client operations
-type PrivateClientInterface interface {
-	IsAuthenticated() bool
-	PlaceOrder(args []map[string]string) error
-}
-
 // OrderProcessor handles placing orders based on trading signals
-type OrderProcessor struct {
-	privateClient PrivateClientInterface
-	ctx           context.Context
-	cancel        context.CancelFunc
+type SignalOrderMaker struct {
+	privateClient *ws.PrivateClient
 	orderIDMap    sync.Map
 	clOrdIDMap    sync.Map
 }
 
 // NewOrderMaker creates a new order maker
-func NewOrderMaker(privateClient *ws.PrivateClient) *OrderProcessor {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &OrderProcessor{
+func NewOrderMaker(privateClient *ws.PrivateClient) *SignalOrderMaker {
+	return &SignalOrderMaker{
 		privateClient: privateClient,
-		ctx:           ctx,
-		cancel:        cancel,
-	}
-}
-
-// NewOrderMakerWithInterface creates a new order maker with interface (for testing)
-func NewOrderMakerWithInterface(privateClient PrivateClientInterface) *OrderProcessor {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &OrderProcessor{
-		privateClient: privateClient,
-		ctx:           ctx,
-		cancel:        cancel,
 	}
 }
 
 // PlaceOrder places an order based on trading signal
-func (p *OrderProcessor) PlaceOrder(signal *common.Signal) (clOrdID, ordID string, err error) {
+func (p *SignalOrderMaker) PlaceOrder(signal *common.Signal) (clOrdID, ordID string, err error) {
 	if !p.privateClient.IsAuthenticated() {
 		return "", "", fmt.Errorf("private client not authenticated")
 	}
