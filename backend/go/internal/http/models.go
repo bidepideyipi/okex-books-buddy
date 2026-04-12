@@ -44,16 +44,61 @@ type PlaceOrderRequest struct {
 	AttachAlgoOrds []map[string]string `json:"attachAlgoOrds,omitempty"`
 }
 
-// PlaceOrderResponse represents the response from placing an order
-type PlaceOrderResponse struct {
+type OrdersPendingRequest struct {
+	InstType string `json:"instType,omitempty"`
+	InstID   string `json:"instId,omitempty"`
+}
+
+type OrdersPendingResponse struct {
 	Code string `json:"code"`
 	Msg  string `json:"msg"`
 	Data []struct {
-		OrdID   string `json:"ordId"`
-		ClOrdID string `json:"clOrdId"`
-		Tag     string `json:"tag"`
-		SCode   string `json:"sCode"`
-		SMsg    string `json:"sMsg"`
+		InstType  string `json:"instType"`
+		InstID    string `json:"instId"`
+		OrdId     string `json:"ordId"`
+		ClOrdId   string `json:"clOrdId"`
+		Px        string `json:"px"`
+		Sz        string `json:"sz"`
+		Pnl       string `json:"pnl"`
+		OrdType   string `json:"ordType"`
+		Side      string `json:"side"`
+		PosSide   string `json:"posSide"`
+		AccFillSz string `json:"accFillSz"`
+		FillPx    string `json:"fillPx"`
+		FillSz    string `json:"fillSz"`
+		State     string `json:"state"`
+		UTime     string `json:"uTime"`
+		CTime     string `json:"cTime"`
+	} `json:"data"`
+}
+
+type CancelOrderRequest struct {
+	InstID  string `json:"instId"`
+	OrdId   string `json:"ordId"`
+	ClOrdID string `json:"clOrdId,omitempty"`
+}
+
+type AmendOrderRequest struct {
+	InstID         string              `json:"instId"`
+	CxlOnFail      string              `json:"cxlOnFail,omitempty"`
+	OrdId          string              `json:"ordId,omitempty"`
+	ClOrdID        string              `json:"clOrdId,omitempty"`
+	NewSz          string              `json:"newSz,omitempty"`
+	NewPx          string              `json:"newPx,omitempty"`
+	AttachAlgoOrds []map[string]string `json:"attachAlgoOrds,omitempty"`
+}
+
+// PlaceOrderResponse represents the response from placing an order
+type OrderResponse struct {
+	Code string `json:"code"`
+	Msg  string `json:"msg"`
+	Data []struct {
+		OrdID          string              `json:"ordId"`
+		ClOrdID        string              `json:"clOrdId"`
+		Tag            string              `json:"tag"`
+		SCode          string              `json:"sCode"`
+		SMsg           string              `json:"sMsg"`
+		AttachAlgoOrds []map[string]string `json:"attachAlgoOrds,omitempty"`
 	} `json:"data"`
 }
 
@@ -64,26 +109,4 @@ type ServerTimeResponse struct {
 	Data []struct {
 		Ts string `json:"ts"`
 	} `json:"data"`
-}
-
-// PlaceOrderHTTPRequest represents the HTTP request for placing an order
-type PlaceOrderHTTPRequest struct {
-	InstID     string `json:"instId"`
-	TdMode     string `json:"tdMode"`
-	Ccy        string `json:"ccy,omitempty"`
-	ClOrdID    string `json:"clOrdId"`
-	Tag        string `json:"tag,omitempty"`
-	Side       string `json:"side"`
-	OrdType    string `json:"ordType"`
-	Sz         string `json:"sz"`
-	Px         string `json:"px,omitempty"`
-	ReduceOnly string `json:"reduceOnly,omitempty"`
-}
-
-// PlaceOrderHTTPResponse represents the HTTP response for placing an order
-type PlaceOrderHTTPResponse struct {
-	Code    int                 `json:"code"`
-	Message string              `json:"message"`
-	Data    *PlaceOrderResponse `json:"data,omitempty"`
-	Error   string              `json:"error,omitempty"`
 }

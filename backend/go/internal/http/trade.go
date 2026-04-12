@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -99,7 +100,7 @@ func (c *OKExHTTPClient) makeRequest(method, path string, params map[string]inte
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	//timestamp := time.Now().UTC().Add(time.Duration(c.timeOffset) * time.Millisecond).Format("2006-01-02T15:04:05.000Z")
 	signature := c.generateSignature(timestamp, method, path, requestBody)
-	log.Printf("[debug]reqBody is %s", signature)
+	log.Printf("[debug] [%s] path is %s,reqBody is %s", method, path, requestBody)
 
 	requestURL := c.baseURL + path
 	if method == "GET" && len(params) > 0 {
@@ -134,6 +135,7 @@ func (c *OKExHTTPClient) makeRequest(method, path string, params map[string]inte
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
+	log.Printf("respBody=%s", respBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -146,14 +148,68 @@ func (c *OKExHTTPClient) makeRequest(method, path string, params map[string]inte
 }
 
 // PlaceOrder places a batch order via OKEx API
-func (c *OKExHTTPClient) PlaceOrder(orderReq *PlaceOrderRequest) (*PlaceOrderResponse, error) {
+func (c *OKExHTTPClient) PlaceOrder(orderReq *PlaceOrderRequest) (*OrderResponse, error) {
 
 	respBody, err := c.makeRequest("POST", common.PLACE_ORDER_PATH, nil, orderReq)
 	if err != nil {
 		return nil, err
 	}
 
-	var response PlaceOrderResponse
+	var response OrderResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.Code != "0" {
+		return nil, fmt.Errorf("order placement failed: code=%s, msg=%s", response.Code, response.Msg)
+	}
+
+	return &response, nil
+}
+
+func (c *OKExHTTPClient) OrdersPending(orderReq *OrdersPendingRequest) (*OrdersPendingResponse, error) {
+	respBody, err := c.makeRequest("GET", common.ORDERS_PENDING_PATH, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OrdersPendingResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.Code != "0" {
+		return nil, fmt.Errorf("order placement failed: code=%s, msg=%s", response.Code, response.Msg)
+	}
+
+	return &response, nil
+}
+
+func (c *OKExHTTPClient) CancelOrder(orderReq *CancelOrderRequest) (*OrderResponse, error) {
+	respBody, err := c.makeRequest("POST", common.CANCEL_ORDER_PATH, nil, orderReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OrderResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.Code != "0" {
+		return nil, fmt.Errorf("order placement failed: code=%s, msg=%s", response.Code, response.Msg)
+	}
+
+	return &response, nil
+}
+
+func (c *OKExHTTPClient) AmendOrder(orderReq *AmendOrderRequest) (*OrderResponse, error) {
+	respBody, err := c.makeRequest("POST", common.AMEND_ORDER_PATH, nil, orderReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OrderResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -218,4 +274,15 @@ func (c *OKExHTTPClient) SyncServerTime() (int64, error) {
 	log.Printf("OKEx server time: %d ms, Local time: %d ms, Offset: %d ms", serverTime, localTime, offset)
 
 	return offset, nil
+}
+
+func GenerateOrderID(head string) string {
+	// 生成随机字母 a-z
+	randomLetter := 'a' + rune(rand.Intn(26))
+
+	// 获取当前时间戳（毫秒）
+	timestamp := time.Now().UnixMilli()
+
+	// 格式化：ao + 随机字母 + 时间戳
+	return fmt.Sprintf("%s%d%c", head, timestamp, randomLetter)
 }
