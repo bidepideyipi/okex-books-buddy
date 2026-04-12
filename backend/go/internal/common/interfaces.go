@@ -47,9 +47,32 @@ type StreamSignal struct {
 	Line2               string
 }
 
+type WsData struct {
+	ID      string                 `json:"id"`
+	Op      string                 `json:"op"`
+	Code    string                 `json:"code"`
+	Msg     string                 `json:"msg"`
+	Event   string                 `json:"event"` //有Event就没有Data
+	Arg     map[string]interface{} `json:"arg"`
+	Data    []interface{}          `json:"data"`
+	InTime  string                 `json:"inTime"`
+	OutTime string                 `json:"outTime"`
+	SCode   string                 `json:"sCode"`
+	SMsg    string                 `json:"sMsg"`
+}
+
+type WsEvent struct {
+	Event     string                 `json:"event"` //有Event就没有Data
+	Arg       map[string]interface{} `json:"arg"`
+	ConnID    string                 `json:"connId"`
+	ConnCount string                 `json:"connCount"`
+}
+
 // MessageHandler processes incoming messages
 type MessageHandler func(msg []byte) error
 type StreamSignalHandler func(sig *StreamSignal) error
+type EventHandler func(event *WsEvent) error
+type MapHandler func(data []interface{}) error
 
 // WSClientInterface defines the common interface for WebSocket clients
 type WSClientInterface interface {

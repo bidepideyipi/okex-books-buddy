@@ -16,18 +16,15 @@ import (
  * @param mongoClient MongoDB client for inserting orders and positions
  * @param orderProcessor Order processor
  */
-func NewPrivateMessageHandler(mongoClient *mongodb.Client, orderProcessor *OrderProcessor, postionProcessor *PositionProcessor) common.MessageHandler {
+func NewPrivateMessageHandler(mongoClient *mongodb.Client) common.MessageHandler {
 	return func(msg []byte) error {
 		//在这里写入了数据 到 MongoDB
 		if err := saveMessage(mongoClient, msg); err != nil {
 			return err
 		}
 
-		//在这里处理了事件
-		if orderProcessor != nil && postionProcessor != nil {
-			if err := handleEvent(orderProcessor, postionProcessor, msg); err != nil {
-				return err
-			}
+		if err := handleEvent(msg); err != nil {
+			return err
 		}
 
 		return nil
@@ -369,7 +366,7 @@ func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 	return position, nil
 }
 
-func handleEvent(orderProcessor *OrderProcessor, postionProcessor *PositionProcessor, message []byte) error {
+func handleEvent(message []byte) error {
 	//log.Printf("[INFO] %s", string(message))
 	var msg map[string]interface{}
 	if err := json.Unmarshal(message, &msg); err != nil {
@@ -379,23 +376,40 @@ func handleEvent(orderProcessor *OrderProcessor, postionProcessor *PositionProce
 	if event, ok := msg["event"].(string); ok {
 		switch event {
 		case "channel-conn-count":
-			log.Printf("[INFO] %s", string(message))
+			if channel, ok := msg["channel"].(string); ok {
+				if connCount, ok := msg["connCount"].(string); ok {
+					log.Printf("[INFO] Channel conn-count: channel=%s, connCount=%s", channel, connCount)
+				} else {
+					log.Printf("channel-conn-count事件中没有connCount字段，请注意官方是否修改了参数")
+				}
+			} else {
+				log.Printf("channel-conn-count事件中没有channel字段，请注意官方是否修改了参数")
+			}
+			//因为golang的switch case不能使用continue，只能写else
 		case "subscribe":
 			if arg, ok := msg["arg"].(map[string]interface{}); ok {
 				if channel, ok := arg["channel"].(string); ok {
 					log.Printf("[INFO] Subscribe successful: channel=%s", channel)
+				} else {
+					log.Printf("subscribe事件中没有channel字段，请注意官方是否修改了参数")
 				}
+			} else {
+				log.Printf("subscribe事件中没有arg字段，请注意官方是否修改了参数")
 			}
 		case "unsubscribe":
 			if arg, ok := msg["arg"].(map[string]interface{}); ok {
 				if channel, ok := arg["channel"].(string); ok {
 					log.Printf("[INFO] Unsubscribe successful: channel=%s", channel)
+				} else {
+					log.Printf("unsubscribe事件中没有channel字段，请注意官方是否修改了参数")
 				}
+			} else {
+				log.Printf("unsubscribe事件中没有arg字段，请注意官方是否修改了参数")
 			}
 		case "error":
 			//TODO Test error response
 			log.Printf("[ERROR] Event error: %v", msg)
-			orderProcessor.HandleErrorResponse(message)
+			//orderProcessor.HandleErrorResponse(message)
 		default:
 			log.Printf("[WARNING] Unknown event: %s", event)
 		}
@@ -419,9 +433,10 @@ func handleEvent(orderProcessor *OrderProcessor, postionProcessor *PositionProce
 
 	switch channel {
 	case "orders":
-		return orderProcessor.HandleEvent(data)
+		log.Printf("[DEBUG] Processing order data: %+v", data)
 	case "positions":
-		return postionProcessor.HandleEvent(data)
+		log.Printf("[DEBUG] Processing position data: %+v", data)
+		//return postionProcessor.HandleEvent(data)
 	default:
 		log.Printf("Unknown private channel: %s", channel)
 	}

@@ -7,8 +7,13 @@ package common
  */
 
 const (
+	//Redis key group
 	LIST_KEY      = "orders"
 	STREAM_KEY    = "signals"
 	GROUP_NAME    = "gp-go"
 	CONSUMER_NAME = "consumer-go"
+
+	//OKE API group
+	OKEX_API_BASE_URL = "https://www.okx.com"
+	PLACE_ORDER_PATH  = "/api/v5/trade/order"
 )

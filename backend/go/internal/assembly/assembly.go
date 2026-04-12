@@ -6,9 +6,9 @@ import (
 
 	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/config"
+	rest "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
-	"github.com/supermancell/okex-buddy/internal/signal"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
@@ -20,6 +20,7 @@ type Assembly struct {
 	RedisClient   *redisclient.Client
 	MongoClient   *mongodb.Client
 	PrivateClient *ws.PrivateClient
+	OkxClient     *rest.OKExHTTPClient
 }
 
 func NewAssembly() *Assembly {
@@ -50,6 +51,40 @@ func (a *Assembly) LoadMongo() error {
 
 	log.Println("Connected to MongoDB")
 	a.MongoClient = mongoClient
+	return nil
+}
+
+func (a *Assembly) LoadOkxRest() error {
+	if a.MongoClient == nil {
+		if err := a.LoadMongo(); err != nil {
+			return err
+		}
+	}
+
+	apiKey, secretKey, passphrase, opErr := a.MongoClient.GetOKExConfig()
+	if opErr != nil {
+		log.Printf("Failed to get OKEx config from MongoDB: %v", opErr)
+		log.Printf("Please ensure API credentials are stored in MongoDB config collection")
+		return opErr
+	}
+
+	privateConfig := ws.OKExConfig{
+		APIKey:     apiKey,
+		SecretKey:  secretKey,
+		Passphrase: passphrase,
+	}
+
+	a.OkxClient = rest.NewOKExHTTPClientWithProxy(privateConfig, a.Config.OKEX.UseProxy, a.Config.OKEX.HTTPProxyAddr)
+
+	log.Println("Syncing time with OKEx server for HTTP client...")
+	offset, err := a.OkxClient.SyncServerTime()
+	if err != nil {
+		log.Printf("Warning: Failed to sync time: %v", err)
+	} else {
+		a.OkxClient.SetTimeOffset(offset)
+		log.Printf("HTTP client time offset set to: %d ms", offset)
+	}
+
 	return nil
 }
 
@@ -104,23 +139,6 @@ func (a *Assembly) LoadPrivateWs(messageHandler common.MessageHandler) error {
 
 	log.Println("Private WebSocket connected, authenticated, and subscribed")
 	a.PrivateClient = privateClient
-	return nil
-}
-
-func (a *Assembly) RunListConsumer(messageHandler common.MessageHandler) error {
-	if a.RedisClient == nil {
-		if err := a.LoadRedis(); err != nil {
-			return err
-		}
-	}
-
-	if a.MongoClient == nil {
-		if err := a.LoadMongo(); err != nil {
-			return err
-		}
-	}
-
-	signal.StartSignalConsumer(a.RedisClient.Client(), messageHandler)
 	return nil
 }
 

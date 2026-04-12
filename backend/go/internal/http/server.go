@@ -14,6 +14,7 @@ var (
 	privateWSHealthy  int32 = 0
 	businessWSHealthy int32 = 0
 	redisHealthy      int32 = 1
+	okexHTTPClient    *OKExHTTPClient
 )
 
 // SetPublicWSHealthy sets the Public WebSocket health status

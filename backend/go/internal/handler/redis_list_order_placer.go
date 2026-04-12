@@ -24,6 +24,7 @@ func NewOrderMaker(privateClient *ws.PrivateClient) *SignalOrderMaker {
 }
 
 // PlaceOrder places an order based on trading signal
+// Read the document：https://www.okx.com/docs-v5/zh/#order-book-trading-trade-ws-place-order
 func (p *SignalOrderMaker) PlaceOrder(signal *common.Signal) (clOrdID, ordID string, err error) {
 	if !p.privateClient.IsAuthenticated() {
 		return "", "", fmt.Errorf("private client not authenticated")
