@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/supermancell/okex-buddy/internal/common"
+	"github.com/supermancell/okex-buddy/internal/redisclient"
 )
 
 // StreamConsumer consumes signals from Redis Stream
@@ -145,7 +146,7 @@ func (c *StreamConsumer) consumeStream() {
 // processStreamMessage processes a message from Redis Stream
 func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 	// Print original message before type conversion
-	log.Printf("[DEBUG] Original message values: %+v", message.Values)
+	//log.Printf("[DEBUG] Original message values: %+v", message.Values)
 
 	signal := &common.StreamSignal{
 		Timestamp:           getStringValue(message.Values["timestamp"]),
@@ -204,8 +205,8 @@ func (c *StreamConsumer) validateStreamSignal(signal *common.StreamSignal) error
 }
 
 // StartStreamConsumer starts the stream signal consumer
-func StartStreamConsumer(redisClient *redis.Client, messageHandler common.StreamSignalHandler) {
-	consumer := NewStreamConsumer(redisClient, messageHandler)
+func StartStreamConsumer(redisClient *redisclient.Client, messageHandler common.StreamSignalHandler) {
+	consumer := NewStreamConsumer(redisClient.Client(), messageHandler)
 
 	// Set callback function for processing signals
 	consumer.SetMessageHandler(messageHandler)

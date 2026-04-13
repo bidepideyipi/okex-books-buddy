@@ -9,6 +9,7 @@ import (
 	rest "github.com/supermancell/okex-buddy/internal/http"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 	"github.com/supermancell/okex-buddy/internal/redisclient"
+	"github.com/supermancell/okex-buddy/internal/signal"
 	"github.com/supermancell/okex-buddy/internal/ws"
 )
 
@@ -16,11 +17,12 @@ import (
 * 通过Assembly定义一个类似Spring的容器，用于管理所有的组件
  */
 type Assembly struct {
-	Config        *config.AppConfig
-	RedisClient   *redisclient.Client
-	MongoClient   *mongodb.Client
-	PrivateClient *ws.PrivateClient
-	OkxClient     *rest.OKExHTTPClient
+	Config         *config.AppConfig
+	RedisClient    *redisclient.Client
+	MongoClient    *mongodb.Client
+	PrivateClient  *ws.PrivateClient
+	OkxClient      *rest.OKExHTTPClient
+	StreamConsumer *signal.StreamConsumer
 }
 
 func NewAssembly() *Assembly {
@@ -139,6 +141,29 @@ func (a *Assembly) LoadPrivateWs(messageHandler common.MessageHandler) error {
 
 	log.Println("Private WebSocket connected, authenticated, and subscribed")
 	a.PrivateClient = privateClient
+	return nil
+}
+
+func (a *Assembly) LoadStreamConsumer(messageHandler common.StreamSignalHandler) error {
+	if a.RedisClient == nil {
+		if err := a.LoadRedis(); err != nil {
+			return err
+		}
+	}
+
+	a.StreamConsumer = signal.NewStreamConsumer(a.RedisClient.Client(), messageHandler)
+	a.StreamConsumer.Start()
+
+	return nil
+}
+
+func (a *Assembly) CloseStreamConsumer() error {
+	if a.StreamConsumer == nil {
+		return nil
+	}
+
+	a.StreamConsumer.Stop()
+	log.Println("Stream consumer closed")
 	return nil
 }
 

@@ -1,4 +1,4 @@
-package candlestick
+package parser
 
 import (
 	"encoding/json"

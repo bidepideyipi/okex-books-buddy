@@ -8,7 +8,7 @@ import (
 	rest "github.com/supermancell/okex-buddy/internal/http"
 )
 
-func TestOrderMaker(t *testing.T) {
+func TestOrderProcessor(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestOrderMaker(t *testing.T) {
 
 }
 
-func TestOrdersPending(t *testing.T) {
+func TestOrdersPending1(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestOrdersPending(t *testing.T) {
 	fmt.Printf("resp: %v\n", resp)
 }
 
-func TestCancelOrder(t *testing.T) {
+func TestCancelOrder1(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestCancelOrder(t *testing.T) {
 	fmt.Printf("resp: %v\n", resp)
 }
 
-func TestAmendType(t *testing.T) {
+func TestAmendOrder(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)

@@ -3,7 +3,7 @@ package handler
 import (
 	"log"
 
-	"github.com/supermancell/okex-buddy/internal/candlestick"
+	"github.com/supermancell/okex-buddy/internal/parser"
 	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
 )
@@ -11,7 +11,7 @@ import (
 // NewBusinessMessageHandler creates a message handler for business WebSocket
 func NewBusinessMessageHandler(mongoClient *mongodb.Client) common.MessageHandler {
 	return func(msg []byte) error {
-		candles, err := candlestick.ParseCandlestick(msg)
+		candles, err := parser.ParseCandlestick(msg)
 		if err != nil {
 			log.Printf("Failed to parse candlestick message: %v", err)
 			return err
