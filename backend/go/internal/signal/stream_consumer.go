@@ -2,13 +2,15 @@ package signal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/supermancell/okex-buddy/internal/common"
-	"github.com/supermancell/okex-buddy/internal/redisclient"
 )
 
 // StreamConsumer consumes signals from Redis Stream
@@ -24,16 +26,12 @@ type StreamConsumer struct {
 func NewStreamConsumer(redisClient *redis.Client, messageHandler common.StreamSignalHandler) *StreamConsumer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &StreamConsumer{
-		redisClient: redisClient,
-		timeout:     5 * time.Second,
-		ctx:         ctx,
-		cancel:      cancel,
+		messageHandler: messageHandler,
+		redisClient:    redisClient,
+		timeout:        5 * time.Second,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
-}
-
-// SetSignalCallback sets the callback function for processing signals
-func (c *StreamConsumer) SetMessageHandler(handler common.StreamSignalHandler) {
-	c.messageHandler = handler
 }
 
 // Start starts consuming signals from Redis Stream
@@ -92,6 +90,46 @@ func getStringValue(val interface{}) string {
 	}
 }
 
+// parseMap64 parses JSON string to map[string]float64
+func parseMap64(val interface{}) map[string]float64 {
+	if val == nil {
+		return nil
+	}
+
+	jsonStr, ok := val.(string)
+	if !ok {
+		return nil
+	}
+
+	var resultMap map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &resultMap); err != nil {
+		log.Printf("[ERROR] Failed to parse JSON map: %v", err)
+		return nil
+	}
+
+	result := make(map[string]float64)
+	for k, v := range resultMap {
+		switch num := v.(type) {
+		case float64:
+			result[k] = num
+		case string:
+			if num, err := strconv.ParseFloat(num, 64); err == nil {
+				result[k] = num
+			} else {
+				log.Printf("[ERROR] Failed to parse float64 for key %s: %v", k, err)
+			}
+		case int:
+			result[k] = float64(num)
+		case int64:
+			result[k] = float64(num)
+		default:
+			log.Printf("[WARN] Unsupported type for key %s: %T", k, v)
+		}
+	}
+
+	return result
+}
+
 // consumeStream consumes messages from Redis Stream
 func (c *StreamConsumer) consumeStream() {
 	log.Println("[INFO] Starting consumeStream loop")
@@ -102,7 +140,7 @@ func (c *StreamConsumer) consumeStream() {
 			log.Println("[INFO] consumeStream loop stopped by context")
 			return
 		default:
-			log.Printf("[DEBUG] Attempting to read from stream group %s, consumer %s", common.GROUP_NAME, common.CONSUMER_NAME)
+			// log.Printf("[DEBUG] Attempting to read from stream group %s, consumer %s", common.GROUP_NAME, common.CONSUMER_NAME)
 
 			streams, err := c.redisClient.XReadGroup(c.ctx, &redis.XReadGroupArgs{
 				Group:    common.GROUP_NAME,
@@ -148,8 +186,29 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 	// Print original message before type conversion
 	//log.Printf("[DEBUG] Original message values: %+v", message.Values)
 
+	priceStr := getStringValue(message.Values["price"])
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		log.Printf("[ERROR] Failed to parse price: %v", err)
+		return err
+	}
+
+	line1Str := getStringValue(message.Values["line1"])
+	line1, err := strconv.ParseFloat(line1Str, 64)
+	if err != nil {
+		log.Printf("[ERROR] Failed to parse line1: %v", err)
+		return err
+	}
+
+	line2Str := getStringValue(message.Values["line2"])
+	line2, err := strconv.ParseFloat(line2Str, 64)
+	if err != nil {
+		log.Printf("[ERROR] Failed to parse line2: %v", err)
+		return err
+	}
+
 	signal := &common.StreamSignal{
-		Timestamp:           getStringValue(message.Values["timestamp"]),
+		Timestamp:           extractTimestampFromID(message.ID),
 		InstID:              getStringValue(message.Values["inst_id"]),
 		Bar:                 getStringValue(message.Values["bar"]),
 		Prediction:          getStringValue(message.Values["prediction"]),
@@ -158,21 +217,21 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 		PredictionHighLabel: getStringValue(message.Values["prediction_high_label"]),
 		PredictionLow:       getStringValue(message.Values["prediction_low"]),
 		PredictionLowLabel:  getStringValue(message.Values["prediction_low_label"]),
-		Probabilities:       getStringValue(message.Values["probabilities"]),
-		ProbabilitiesHigh:   getStringValue(message.Values["probabilities_high"]),
-		ProbabilitiesLow:    getStringValue(message.Values["probabilities_low"]),
+		Probabilities:       parseMap64(message.Values["probabilities"]),
+		ProbabilitiesHigh:   parseMap64(message.Values["probabilities_high"]),
+		ProbabilitiesLow:    parseMap64(message.Values["probabilities_low"]),
 		FeaturesCount:       getStringValue(message.Values["features_count"]),
-		Price:               getStringValue(message.Values["price"]),
-		Line1:               getStringValue(message.Values["line1"]),
-		Line2:               getStringValue(message.Values["line2"]),
+		Price:               price,
+		Line1:               line1,
+		Line2:               line2,
 	}
 
 	if err := c.validateStreamSignal(signal); err != nil {
 		return fmt.Errorf("stream signal validation failed: %w", err)
 	}
 
-	log.Printf("[INFO] Stream signal received: id=%s, inst=%s, prediction=%s, price=%s",
-		message.ID, signal.InstID, signal.Prediction, signal.Price)
+	log.Printf("[INFO] Stream signal received: id=%s, inst=%s, prediction=%s, price=%.2f, Probability=%.2f",
+		message.ID, signal.InstID, signal.Prediction, signal.Price, signal.Probabilities[signal.Prediction])
 
 	if c.messageHandler != nil {
 		if err := c.messageHandler(signal); err != nil {
@@ -185,7 +244,7 @@ func (c *StreamConsumer) processStreamMessage(message redis.XMessage) error {
 
 // validateStreamSignal validates the stream signal
 func (c *StreamConsumer) validateStreamSignal(signal *common.StreamSignal) error {
-	if signal.Timestamp == "" {
+	if signal.Timestamp == 0 {
 		return fmt.Errorf("timestamp is required")
 	}
 
@@ -197,21 +256,27 @@ func (c *StreamConsumer) validateStreamSignal(signal *common.StreamSignal) error
 		return fmt.Errorf("prediction is required")
 	}
 
-	if signal.Price == "" {
+	if signal.Price == 0 {
 		return fmt.Errorf("price is required")
 	}
 
 	return nil
 }
 
-// StartStreamConsumer starts the stream signal consumer
-func StartStreamConsumer(redisClient *redisclient.Client, messageHandler common.StreamSignalHandler) {
-	consumer := NewStreamConsumer(redisClient.Client(), messageHandler)
+// ExtractTimestampFromID 从消息ID提取时间戳
+func extractTimestampFromID(msgID string) int64 {
+	// Redis Stream 消息ID格式: "timestamp-sequence"
+	parts := strings.Split(msgID, "-")
+	if len(parts) < 1 {
+		return 0
+	}
 
-	// Set callback function for processing signals
-	consumer.SetMessageHandler(messageHandler)
+	timestamp, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0
+	}
 
-	go consumer.Start()
-
-	log.Println("Stream consumer started")
+	return timestamp
 }
+
+

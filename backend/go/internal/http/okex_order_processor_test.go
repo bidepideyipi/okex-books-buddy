@@ -8,7 +8,7 @@ import (
 	rest "github.com/supermancell/okex-buddy/internal/http"
 )
 
-func TestOrderProcessor(t *testing.T) {
+func TestOrderPlace(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
@@ -20,21 +20,21 @@ func TestOrderProcessor(t *testing.T) {
 	attachAlgoClOrdId := rest.GenerateOrderID("ao")
 	algoOrd := map[string]string{
 		"attachAlgoClOrdId": attachAlgoClOrdId,
-		"slTriggerPx":       "78.0", //止损触发价
-		"slOrdPx":           "-1",   //止损委托价
+		"slTriggerPx":       "2176.0", //止损触发价
+		"slOrdPx":           "-1",     //止损委托价
 		"slTriggerPxType":   "last",
-		"tpTriggerPx":       "79.8",
+		"tpTriggerPx":       "2196.0",
 		"tpOrdPx":           "-1",
 		"tpTriggerPxType":   "last",
 	}
 
 	resp, err := app.OkxClient.PlaceOrder(&rest.PlaceOrderRequest{
-		InstID:         "SOL-USDT-SWAP",
+		InstID:         "ETH-USDT-SWAP",
 		TdMode:         "cross",
 		Side:           "buy",
 		PosSide:        "long",
 		OrdType:        "limit",
-		Px:             "79.0",
+		Px:             "2186.0",
 		Sz:             "0.1",
 		AttachAlgoOrds: []map[string]string{algoOrd},
 	})
@@ -49,7 +49,36 @@ func TestOrderProcessor(t *testing.T) {
 
 }
 
-func TestOrdersPending1(t *testing.T) {
+// 市价平多
+func TestSellMarket(t *testing.T) {
+	app := assembly.NewAssembly()
+	if err := app.LoadMongo(); err != nil {
+		t.Fatal(err)
+	}
+
+	app.LoadOkxRest()
+
+	resp, err := app.OkxClient.PlaceOrder(&rest.PlaceOrderRequest{
+		InstID:  "ETH-USDT-SWAP",
+		TdMode:  "cross",
+		Side:    "sell",
+		PosSide: "long",
+		OrdType: "market",
+		Sz:      "0.2",
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//resp: &{0  [{3472763460055277568   0 Order placed}]}
+	fmt.Printf("resp: %v\n", resp)
+
+}
+
+// 26.04.03 测试了使用止盈止损单功能，成交后的止盈止损单不会在pending中显示
+// 也就是实际订单数量是Position + PendingOrder
+func TestOrdersPending(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
@@ -59,6 +88,34 @@ func TestOrdersPending1(t *testing.T) {
 
 	resp, err := app.OkxClient.OrdersPending(&rest.OrdersPendingRequest{
 		InstType: "SWAP",
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("resp: %v\n", resp)
+}
+
+// 平仓限价订单
+func TestTriggerSell(t *testing.T) {
+	app := assembly.NewAssembly()
+	if err := app.LoadMongo(); err != nil {
+		t.Fatal(err)
+	}
+
+	app.LoadOkxRest()
+
+	//https://www.okx.com/docs-v5/zh/#order-book-trading-algo-trading-post-place-algo-order
+	resp, err := app.OkxClient.PlaceAlgoOrder(&rest.PlaceAlgoOrderRequest{
+		InstID:      "ETH-USDT-SWAP",
+		TdMode:      "cross",
+		Side:        "sell",
+		PosSide:     "long",
+		OrdType:     "conditional",
+		Sz:          "0.2",
+		TpTriggerPx: "2450",
+		TpOrdPx:     "-1",
 	})
 
 	if err != nil {

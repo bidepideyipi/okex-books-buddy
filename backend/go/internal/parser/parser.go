@@ -19,6 +19,97 @@ type Message struct {
 	Data [][]string `json:"data"`
 }
 
+// parsePosition parses position data from WebSocket message
+func ParsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
+	position := &mongodb.Position{
+		Timestamp: time.Now().UnixMilli(),
+	}
+
+	if instID, ok := posMap["instId"].(string); ok {
+		position.InstID = instID
+	}
+
+	if mgnMode, ok := posMap["mgnMode"].(string); ok {
+		position.MgnMode = mgnMode
+	}
+
+	if posID, ok := posMap["posId"].(string); ok {
+		position.PosID = posID
+	}
+
+	if posSide, ok := posMap["posSide"].(string); ok {
+		position.PosSide = posSide
+	}
+
+	if pos, ok := posMap["pos"].(string); ok {
+		position.Pos, _ = strconv.ParseFloat(pos, 64)
+	}
+
+	if availPos, ok := posMap["availPos"].(string); ok {
+		position.AvailPos, _ = strconv.ParseFloat(availPos, 64)
+	}
+
+	if baseBal, ok := posMap["baseBal"].(string); ok {
+		position.BaseBal = baseBal
+	}
+
+	if quoteBal, ok := posMap["quoteBal"].(string); ok {
+		position.QuoteBal = quoteBal
+	}
+
+	if posCcy, ok := posMap["posCcy"].(string); ok {
+		position.PosCcy = posCcy
+	}
+
+	if pnlRatio, ok := posMap["pnlRatio"].(string); ok {
+		position.PnlRatio = pnlRatio
+	}
+
+	if upl, ok := posMap["upl"].(string); ok {
+		position.Upl = upl
+	}
+
+	if uplRatio, ok := posMap["uplRatio"].(string); ok {
+		position.UplRatio = uplRatio
+	}
+
+	if lever, ok := posMap["lever"].(string); ok {
+		position.Lever = lever
+	}
+
+	if liqPx, ok := posMap["liqPx"].(string); ok {
+		position.LiqPx = liqPx
+	}
+
+	if markPx, ok := posMap["markPx"].(string); ok {
+		position.MarkPx = markPx
+	}
+
+	if cTime, ok := posMap["cTime"].(string); ok {
+		position.CTime = cTime
+	}
+
+	if uTime, ok := posMap["uTime"].(string); ok {
+		position.UTime = uTime
+	}
+
+	if adl, ok := posMap["adl"].(string); ok {
+		position.ADL = adl
+	}
+
+	if notionalUSD, ok := posMap["notionalUsd"].(string); ok {
+		position.NotionalUSD = notionalUSD
+	}
+
+	if last, ok := posMap["last"].(string); ok {
+		position.Last = last
+	}
+
+	position.ID = fmt.Sprintf("%s_%s", position.InstID, position.PosID)
+
+	return position, nil
+}
+
 // ParseCandlestick parses a candlestick message and converts it to MongoDB format
 func ParseCandlestick(msg []byte) ([]mongodb.Candlestick, error) {
 	var message Message

@@ -97,10 +97,10 @@ func (c *OKExHTTPClient) makeRequest(method, path string, params map[string]inte
 		requestBody = string(bodyBytes)
 	}
 
-	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	//timestamp := time.Now().UTC().Add(time.Duration(c.timeOffset) * time.Millisecond).Format("2006-01-02T15:04:05.000Z")
+	// timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	timestamp := time.Now().UTC().Add(time.Duration(c.timeOffset) * time.Millisecond).Format("2006-01-02T15:04:05.000Z")
 	signature := c.generateSignature(timestamp, method, path, requestBody)
-	log.Printf("[debug] [%s] path is %s,reqBody is %s", method, path, requestBody)
+	log.Printf("[DEBUG] [%s] path is %s,reqBody is %s", method, path, requestBody)
 
 	requestURL := c.baseURL + path
 	if method == "GET" && len(params) > 0 {
@@ -151,6 +151,26 @@ func (c *OKExHTTPClient) makeRequest(method, path string, params map[string]inte
 func (c *OKExHTTPClient) PlaceOrder(orderReq *PlaceOrderRequest) (*OrderResponse, error) {
 
 	respBody, err := c.makeRequest("POST", common.PLACE_ORDER_PATH, nil, orderReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var response OrderResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.Code != "0" {
+		return nil, fmt.Errorf("order placement failed: code=%s, msg=%s", response.Code, response.Msg)
+	}
+
+	return &response, nil
+}
+
+// PlaceAlgoOrder places a batch order via OKEx API
+func (c *OKExHTTPClient) PlaceAlgoOrder(orderReq *PlaceAlgoOrderRequest) (*OrderResponse, error) {
+
+	respBody, err := c.makeRequest("POST", common.PLACE_ORDER_ALGO_PATH, nil, orderReq)
 	if err != nil {
 		return nil, err
 	}

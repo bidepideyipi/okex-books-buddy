@@ -14,9 +14,10 @@ const (
 	CONSUMER_NAME = "consumer-go"
 
 	//OKE API group
-	OKEX_API_BASE_URL   = "https://www.okx.com"
-	PLACE_ORDER_PATH    = "/api/v5/trade/order"
-	ORDERS_PENDING_PATH = "/api/v5/trade/orders-pending"
-	CANCEL_ORDER_PATH   = "/api/v5/trade/cancel-order"
-	AMEND_ORDER_PATH    = "/api/v5/trade/amend-order"
+	OKEX_API_BASE_URL     = "https://www.okx.com"
+	PLACE_ORDER_PATH      = "/api/v5/trade/order"
+	ORDERS_PENDING_PATH   = "/api/v5/trade/orders-pending"
+	CANCEL_ORDER_PATH     = "/api/v5/trade/cancel-order"
+	AMEND_ORDER_PATH      = "/api/v5/trade/amend-order"
+	PLACE_ORDER_ALGO_PATH = "/api/v5/trade/order-algo"
 )

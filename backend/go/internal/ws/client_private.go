@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -445,10 +446,13 @@ func (c *PrivateClient) resubscribeAll() {
 
 		args := make([]map[string]string, 0)
 		for _, ch := range channels {
-			args = append(args, map[string]string{
-				"channel":  ch,
-				"instType": "SWAP",
-			})
+			parts := strings.Split(ch, ":")
+			if len(parts) == 2 {
+				args = append(args, map[string]string{
+					"channel":  parts[0],
+					"instType": parts[1],
+				})
+			}
 		}
 
 		if err := c.Subscribe(args); err != nil {

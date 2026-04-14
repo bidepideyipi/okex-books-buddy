@@ -44,6 +44,53 @@ type PlaceOrderRequest struct {
 	AttachAlgoOrds []map[string]string `json:"attachAlgoOrds,omitempty"`
 }
 
+/*
+*
+# 止盈止损策略下单
+POST /api/v5/trade/order-algo
+body
+
+	{
+	    "instId":"BTC-USDT",
+	    "tdMode":"cross",
+	    "side":"buy",
+	    "ordType":"conditional",
+	    "sz":"2",
+	    "tpTriggerPx":"15",
+	    "tpOrdPx":"18"
+	}
+
+# 移动止盈止损策略下单
+POST /api/v5/trade/order-algo
+body
+
+	{
+	    "instId": "BTC-USDT-SWAP",
+	    "tdMode": "cross",
+	    "side": "buy",
+	    "ordType": "move_order_stop",
+	    "sz": "10",
+	    "posSide": "net",
+	    "callbackRatio": "0.05",
+	    "reduceOnly": true
+	}
+*/
+type PlaceAlgoOrderRequest struct {
+	InstID      string `json:"instId"`
+	TdMode      string `json:"tdMode"` //isolated/cross
+	Ccy         string `json:"ccy,omitempty"`
+	ClOrdID     string `json:"clOrdId"`
+	Tag         string `json:"tag,omitempty"`
+	Side        string `json:"side"`    //buy/sell
+	PosSide     string `json:"posSide"` //long/short
+	OrdType     string `json:"ordType"` //limit/post_only/fok/ioc/optimal_limit_ioc
+	Sz          string `json:"sz"`
+	TpTriggerPx string `json:"tpTriggerPx,omitempty"`
+	SlTriggerPx string `json:"slTriggerPx,omitempty"`
+	TpOrdPx     string `json:"tpOrdPx,omitempty"`
+	SlOrdPx     string `json:"slOrdPx,omitempty"`
+}
+
 type OrdersPendingRequest struct {
 	InstType string `json:"instType,omitempty"`
 	InstID   string `json:"instId,omitempty"`

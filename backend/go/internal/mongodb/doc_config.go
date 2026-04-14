@@ -45,3 +45,17 @@ func (c *Client) GetOKExConfig() (apiKey, secretKey, passphrase string, err erro
 
 	return apiKey, secretKey, passphrase, nil
 }
+
+func (c *Client) GetTradeSettingsConfig() (eth_max_size, eth_per_size string, err error) {
+	eth_max_size, err = c.GetConfigValue("tradeSettings", "eth_max_size")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get eth_max_size: %w", err)
+	}
+
+	eth_per_size, err = c.GetConfigValue("tradeSettings", "eth_per_size")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get eth_per_size: %w", err)
+	}
+
+	return eth_max_size, eth_per_size, nil
+}

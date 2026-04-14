@@ -130,7 +130,7 @@ func (a *Assembly) LoadPrivateWs(messageHandler common.MessageHandler) error {
 	}
 
 	channels := []map[string]string{
-		{"channel": "orders", "instType": "SWAP"},
+		//{"channel": "orders", "instType": "SWAP"},
 		{"channel": "positions", "instType": "SWAP"},
 	}
 

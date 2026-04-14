@@ -8,6 +8,7 @@ import (
 
 	"github.com/supermancell/okex-buddy/internal/common"
 	"github.com/supermancell/okex-buddy/internal/mongodb"
+	"github.com/supermancell/okex-buddy/internal/parser"
 )
 
 /**
@@ -246,12 +247,13 @@ func savePositions(mongoClient *mongodb.Client, data []interface{}) error {
 			continue
 		}
 
-		pos, err := parsePosition(posMap)
+		pos, err := parser.ParsePosition(posMap)
 		if err != nil {
 			log.Printf("Failed to parse position: %v", err)
 			continue
 		}
 
+		//log.Printf("[DEBUG] savePositions: %v", pos)
 		//写入DB
 		if err := mongoClient.InsertPosition(pos); err != nil {
 			log.Printf("Failed to insert position: %v", err)
@@ -273,97 +275,6 @@ func savePositions(mongoClient *mongodb.Client, data []interface{}) error {
 	}
 
 	return nil
-}
-
-// parsePosition parses position data from WebSocket message
-func parsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
-	position := &mongodb.Position{
-		Timestamp: time.Now().UnixMilli(),
-	}
-
-	if instID, ok := posMap["instId"].(string); ok {
-		position.InstID = instID
-	}
-
-	if mgnMode, ok := posMap["mgnMode"].(string); ok {
-		position.MgnMode = mgnMode
-	}
-
-	if posID, ok := posMap["posId"].(string); ok {
-		position.PosID = posID
-	}
-
-	if posSide, ok := posMap["posSide"].(string); ok {
-		position.PosSide = posSide
-	}
-
-	if pos, ok := posMap["pos"].(string); ok {
-		position.Pos = pos
-	}
-
-	if availPos, ok := posMap["availPos"].(string); ok {
-		position.AvailPos = availPos
-	}
-
-	if baseBal, ok := posMap["baseBal"].(string); ok {
-		position.BaseBal = baseBal
-	}
-
-	if quoteBal, ok := posMap["quoteBal"].(string); ok {
-		position.QuoteBal = quoteBal
-	}
-
-	if posCcy, ok := posMap["posCcy"].(string); ok {
-		position.PosCcy = posCcy
-	}
-
-	if pnlRatio, ok := posMap["pnlRatio"].(string); ok {
-		position.PnlRatio = pnlRatio
-	}
-
-	if upl, ok := posMap["upl"].(string); ok {
-		position.Upl = upl
-	}
-
-	if uplRatio, ok := posMap["uplRatio"].(string); ok {
-		position.UplRatio = uplRatio
-	}
-
-	if lever, ok := posMap["lever"].(string); ok {
-		position.Lever = lever
-	}
-
-	if liqPx, ok := posMap["liqPx"].(string); ok {
-		position.LiqPx = liqPx
-	}
-
-	if markPx, ok := posMap["markPx"].(string); ok {
-		position.MarkPx = markPx
-	}
-
-	if cTime, ok := posMap["cTime"].(string); ok {
-		position.CTime = cTime
-	}
-
-	if uTime, ok := posMap["uTime"].(string); ok {
-		position.UTime = uTime
-	}
-
-	if adl, ok := posMap["adl"].(string); ok {
-		position.ADL = adl
-	}
-
-	if notionalUSD, ok := posMap["notionalUsd"].(string); ok {
-		position.NotionalUSD = notionalUSD
-	}
-
-	if last, ok := posMap["last"].(string); ok {
-		position.Last = last
-	}
-
-	position.ID = fmt.Sprintf("%s_%s", position.InstID, position.PosID)
-
-	return position, nil
 }
 
 func handleEvent(message []byte) error {
@@ -426,16 +337,16 @@ func handleEvent(message []byte) error {
 		return nil
 	}
 
-	data, ok := msg["data"].([]interface{})
-	if !ok {
-		return nil
-	}
+	// data, ok := msg["data"].([]interface{})
+	// if !ok {
+	// 	return nil
+	// }
 
 	switch channel {
 	case "orders":
-		log.Printf("[DEBUG] Processing order data: %+v", data)
+		//log.Printf("[DEBUG] Processing order data: %+v", data)
 	case "positions":
-		log.Printf("[DEBUG] Processing position data: %+v", data)
+		//log.Printf("[DEBUG] Processing position data: %+v", data)
 		//return postionProcessor.HandleEvent(data)
 	default:
 		log.Printf("Unknown private channel: %s", channel)

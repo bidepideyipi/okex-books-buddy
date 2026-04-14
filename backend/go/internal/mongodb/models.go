@@ -66,29 +66,29 @@ type Order struct {
 
 // Position represents an OKEx position
 type Position struct {
-	ID          string `bson:"_id,omitempty"`
-	InstID      string `bson:"inst_id"`
-	MgnMode     string `bson:"mgn_mode"`
-	PosID       string `bson:"pos_id"`
-	PosSide     string `bson:"pos_side"`
-	Pos         string `bson:"pos"`
-	AvailPos    string `bson:"avail_pos"`
-	BaseBal     string `bson:"base_bal"`
-	QuoteBal    string `bson:"quote_bal"`
-	PosCcy      string `bson:"pos_ccy"`
-	PnlRatio    string `bson:"pnl_ratio"`
-	Upl         string `bson:"upl"`
-	UplRatio    string `bson:"upl_ratio"`
-	Lever       string `bson:"lever"`
-	LiqPx       string `bson:"liq_px"`
-	MarkPx      string `bson:"mark_px"`
-	CTime       string `bson:"c_time"`
-	UTime       string `bson:"u_time"`
-	ADL         string `bson:"adl"`
-	NotionalUSD string `bson:"notional_usd"`
-	Last        string `bson:"last"`
-	Timestamp   int64  `bson:"timestamp"`
-	Active      int    `bson:"active"`
+	ID          string  `bson:"_id,omitempty"`
+	InstID      string  `bson:"inst_id"`
+	MgnMode     string  `bson:"mgn_mode"`
+	PosID       string  `bson:"pos_id"`
+	PosSide     string  `bson:"pos_side"`
+	Pos         float64 `bson:"pos"`
+	AvailPos    float64 `bson:"avail_pos"`
+	BaseBal     string  `bson:"base_bal"`
+	QuoteBal    string  `bson:"quote_bal"`
+	PosCcy      string  `bson:"pos_ccy"`
+	PnlRatio    string  `bson:"pnl_ratio"`
+	Upl         string  `bson:"upl"`
+	UplRatio    string  `bson:"upl_ratio"`
+	Lever       string  `bson:"lever"`
+	LiqPx       string  `bson:"liq_px"`
+	MarkPx      string  `bson:"mark_px"`
+	CTime       string  `bson:"c_time"`
+	UTime       string  `bson:"u_time"`
+	ADL         string  `bson:"adl"`
+	NotionalUSD string  `bson:"notional_usd"`
+	Last        string  `bson:"last"`
+	Timestamp   int64   `bson:"timestamp"`
+	Active      int     `bson:"active"`
 }
 
 // TradingSignal represents a trading signal

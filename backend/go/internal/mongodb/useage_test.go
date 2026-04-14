@@ -14,6 +14,19 @@ func TestConnect(t *testing.T) {
 	// 这里可以添加实际的测试逻辑
 }
 
+func TestGetActivePositions(t *testing.T) {
+	mongoClient := setupMongoDB(t)
+	defer teardownMongoDB(t, mongoClient)
+
+	positions, err := mongoClient.GetActivePositions()
+	if err != nil {
+		t.Fatalf("Failed to get active positions from MongoDB: %v", err)
+	}
+	t.Log("Active positions:", positions)
+}
+
+
+
 func setupMongoDB(t *testing.T) *mongodb.Client {
 	t.Helper()
 	client, err := mongodb.NewClient("mongodb://127.0.0.1:27017", "technical_analysis")

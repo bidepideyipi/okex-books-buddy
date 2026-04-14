@@ -532,7 +532,7 @@ graph TB
 | MONGODB_DATABASE | MongoDB 数据库名 | technical_analysis | 任意有效的数据库名 |
 | ENABLE_BUSINESS_WS | 是否启用 Business WebSocket | true | true, false |
 | USE_PROXY | 是否使用代理 | false | true, false |
-| PROXY_ADDR | 代理地址 | 127.0.0.1:4781 | 任意有效的 SOCKS5 代理地址 |
+| PROXY_ADDR | 代理地址 | 127.0.0.1:7890 | 任意有效的 SOCKS5 代理地址 |
 
 ### 10.2 监控指标
 

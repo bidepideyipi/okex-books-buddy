@@ -119,12 +119,12 @@ func LoadFromEnv() AppConfig {
 			PublicWSURL:      getenvWithDefault("OKEX_WS_PUBLIC", "wss://ws.okx.com:8443/ws/v5/public"),
 			BusinessWSURL:    getenvWithDefault("OKEX_WS_BUSINESS", "wss://ws.okx.com:8443/ws/v5/business"),
 			PrivateWSURL:     getenvWithDefault("OKEX_WS_PRIVATE", "wss://ws.okx.com:8443/ws/v5/private"),
-			UseProxy:         getenvBoolWithDefault("USE_PROXY", true),
-			ProxyAddr:        getenvWithDefault("PROXY_ADDR", "127.0.0.1:4781"),
-			HTTPProxyAddr:    getenvWithDefault("HTTP_PROXY_ADDR", "127.0.0.1:4780"),
+			UseProxy:         getenvBoolWithDefault("USE_PROXY", false),
+			ProxyAddr:        getenvWithDefault("PROXY_ADDR", "127.0.0.1:7890"),
+			HTTPProxyAddr:    getenvWithDefault("HTTP_PROXY_ADDR", "127.0.0.1:7890"),
 			EnablePublicWS:   getenvBoolWithDefault("ENABLE_PUBLIC_WS", false),
-			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", true),
-			EnablePrivateWS:  getenvBoolWithDefault("ENABLE_PRIVATE_WS", false),
+			EnableBusinessWS: getenvBoolWithDefault("ENABLE_BUSINESS_WS", false),
+			EnablePrivateWS:  getenvBoolWithDefault("ENABLE_PRIVATE_WS", true),
 		},
 		Analysis: AnalysisConfig{
 			// ComputeSupportResistance

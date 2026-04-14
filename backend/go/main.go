@@ -69,7 +69,6 @@ func main() {
 	 */
 	signalHandler := handler.NewRedisStreamMessageHandler(app.MongoClient, app.OkxClient)
 	app.LoadStreamConsumer(signalHandler)
-	app.StreamConsumer.Start()
 
 	//启动组件的优雅停机监
 	gracefulShutdown(app)

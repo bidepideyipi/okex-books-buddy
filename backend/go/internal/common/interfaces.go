@@ -29,7 +29,7 @@ type Signal struct {
 * 接收到的是一个上游分类预测系统给出的值, 包含预测结果、预测概率等
  */
 type StreamSignal struct {
-	Timestamp           string
+	Timestamp           int64
 	InstID              string
 	Bar                 string
 	Prediction          string
@@ -38,13 +38,13 @@ type StreamSignal struct {
 	PredictionHighLabel string
 	PredictionLow       string
 	PredictionLowLabel  string
-	Probabilities       string
-	ProbabilitiesHigh   string
-	ProbabilitiesLow    string
+	Probabilities       map[string]float64
+	ProbabilitiesHigh   map[string]float64
+	ProbabilitiesLow    map[string]float64
 	FeaturesCount       string
-	Price               string
-	Line1               string
-	Line2               string
+	Price               float64
+	Line1               float64
+	Line2               float64
 }
 
 type WsData struct {

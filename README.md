@@ -17,7 +17,7 @@ The WebSocket client supports SOCKS5 proxy for local development:
 - **Development (local)**: Enable proxy in `config/app.dev.env`
   ```bash
   USE_PROXY=true
-  PROXY_ADDR=127.0.0.1:4781
+  PROXY_ADDR=127.0.0.1:7890
   ```
 
 - **Production (Hong Kong server)**: Disable proxy in `config/app.prod.env`

@@ -1050,7 +1050,7 @@ graph TB
 | ENABLE_PRIVATE_WS | 是否启用 Private WebSocket | false | true, false |
 | OKEX_PRIVATE_WS | Private WebSocket 端点地址 | wss://ws.okx.com:8443/ws/v5/private | 任意有效的 WebSocket URL |
 | USE_PROXY | 是否使用代理 | false | true, false |
-| PROXY_ADDR | 代理地址 | 127.0.0.1:4781 | 任意有效的 SOCKS5 代理地址 |
+| PROXY_ADDR | 代理地址 | 127.0.0.1:7890 | 任意有效的 SOCKS5 代理地址 |
 
 ### 10.2 监控指标
 
