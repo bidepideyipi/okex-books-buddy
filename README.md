@@ -1,14 +1,12 @@
 ## OKEX-BUDDY
 
-### Local Development
-
 ### Prerequisites
 
 - Go 1.20+
 - Redis 7.x (running on localhost:6379)
+- MongoDB 6.0.6
 
-
-### M2 - WebSocket Client Setup
+### WebSocket Client Setup
 
 #### Proxy Configuration
 
@@ -19,159 +17,120 @@ The WebSocket client supports SOCKS5 proxy for local development:
   USE_PROXY=true
   PROXY_ADDR=127.0.0.1:7890
   ```
-
 - **Production (Hong Kong server)**: Disable proxy in `config/app.prod.env`
   ```bash
   USE_PROXY=false
-  PROXY_ADDR=
   ```
 
 The client will automatically use SOCKS5 proxy when `USE_PROXY=true` is set.
 
-#### Setup Steps
+#### WebSocket Integration Details
 
-1. **Start Redis** (required for M2)
-   ```bash
-   redis-server
-   ```
+In the current version, main.go only integrates the WebSocket PrivateClient. BusinessClient and PublicClient are not integrated. If needed, you can refer to the 'assembly' package to integrate them yourself.
 
-2. **Configure trading pairs in Redis**
-   ```bash
-   # Add trading pairs to monitor (use SWAP contracts for real-time data)
-   redis-cli SADD trading_pairs:active ETH-USDT-SWAP DOGE-USDT-SWAP
-   
-   # Verify configuration
-   redis-cli SMEMBERS trading_pairs:active
-   ```
+<br />
 
-3. **Start WebSocket Client**
-   ```bash
-   cd /Users/anthony/Documents/github/okex-buddy
-   
-   # Load environment variables
-   export $(grep -v '^#' config/app.dev.env | xargs)
-   
-   # Run WebSocket client
-   cd backend/go
-   go run ./cmd/websocket_client
-   ```
+#### BusinessClient
 
-   **Expected output:**
-   ```
-   2026/01/01 10:10:55 Subscription confirmed: BTC-USDT-SWAP
-   2026/01/01 10:10:55 Subscription confirmed: ETH-USDT-SWAP
-   ```
+**Description**
+BusinessClient is a WebSocket client for subscribing to business trading pairs on OKEx exchange. Its main function is to dynamically subscribe to candlestick data for trading pairs based on Redis configuration, while storing candlestick data to MongoDB.
 
-4. **Verify subscription success**
-   
+#### PrivateClient
+
+**Description**
+PrivateClient is a WebSocket client for subscribing to private trading pairs on OKEx exchange. Its main function is to monitor Position change events, while storing Position data to MongoDB.
+
+#### PublicClient
+
+**Description**
+PublicClient is a WebSocket client for subscribing to public trading pairs on OKEx exchange. Its main function is to dynamically subscribe to order book data for trading pairs based on Redis configuration, while performing analysis and storing results to Redis.
+
+**Configure trading pairs in Redis**
+
+```bash
+# Add trading pairs to monitor (use SWAP contracts for real-time data)
+redis-cli SADD trading_pairs:active ETH-USDT-SWAP DOGE-USDT-SWAP
+
+# Verify configuration
+redis-cli SMEMBERS trading_pairs:active
+```
+
+1. **Verify subscription success**
+
    After the WebSocket client starts and subscriptions are confirmed, verify that order book data is being received:
-   
    ```bash
    # Check order book snapshot (first 25 lines show metadata and first few price levels)
    redis-cli -h localhost -p 6379 HGETALL orderbook:BTC-USDT-SWAP | head -25
-   
+
    # Expected output includes:
    # - instrument_id: BTC-USDT-SWAP
    # - checksum: <int32 value>
    # - asks: [array of ask price levels]
    # - bids: [array of bid price levels]
    # - timestamp: <unix timestamp>
-   
+
    # Check real-time event stream length
    redis-cli LLEN list:orderbook:events
    # Should show increasing numbers as updates arrive
    ```
-   
    If you see order book data with valid checksums and increasing event counts, the subscription is working correctly!
-
-5. **Monitor in real-time**
+2. **Monitor in real-time**
    ```bash
    # Watch order book updates in Redis
    redis-cli MONITOR
-   
+
    # Check order book snapshot for a specific pair
    redis-cli HGETALL orderbook:BTC-USDT-SWAP
-   
 
-   
    # View event stream
    redis-cli LRANGE list:orderbook:events 0 10
    ```
-
-6. **Test dynamic subscription**
+3. **Test dynamic subscription**
    ```bash
    # Add a new trading pair (will be subscribed in ~20 seconds)
    redis-cli SADD trading_pairs:active SOL-USDT-SWAP
-   
+
    # Remove a trading pair (will be unsubscribed in ~20 seconds)
    redis-cli SREM trading_pairs:active ETH-USDT-SWAP
    ```
 
-### Original Dev Setup (M1)
+##### Detailed Explanation of Four Core Order Book Algorithms
 
-For reference, the original M1 setup instructions: (dev)
+###### 1. ComputeSupportResistance （支撑阻力位计算）
 
-#### 1. Prerequisites
-- **Golang**: 1.20+
-- **Python**: 3.9+ (for Bytewax / analysis flow)
-- **Redis**: 6.x (running locally, e.g. `localhost:6379`)
+**Algorithm Principle**：Based on price-volume aggregation characteristics in the order book, identify price levels with significant buying or selling pressure.
 
-#### 2. Environment configuration
+**Technical Implementation**：
 
-From the project root (`/Users/anthony/Documents/github/okex-buddy`), load dev environment variables:
+1. **Price Range Division**：Divide the order book price range into fixed-width bins (recommended 50-100 bins)
+2. **Cumulative Order Volume Calculation**：Calculate weighted amounts (price × quantity) for buy and sell orders in each bin
+3. **Significance Identification**：Use local maximum detection to identify support/resistance levels, with threshold set to 1.5-2.0 times the average cumulative volume
+4. **Result Sorting**：Sort by cumulative volume in descending order, return Top-N (recommended 3-5) support and resistance levels
 
-```bash
-cd /Users/anthony/Documents/github/okex-buddy
+**Application Scenarios**：
 
-# App-level dev config (Redis, OKEx WS, API bind, etc.)
-export $(grep -v '^#' config/app.dev.env | xargs)
+- Technical analysis to identify key levels where price may reverse
+- Provide key price level references for automated trading strategies
+- Monitor breakouts of important market support/resistance levels
 
+**Parameter Configuration**：
 
-```
+| Parameter             | Type    | Description                                                           | Recommended Value | Adjustment Suggestions                                          |
+| --------------------- | ------- | --------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------- |
+| binCount              | int     | Number of price range divisions                                       | 50                | High liquidity pairs: 30-50, Low liquidity pairs: 20-30         |
+| significanceThreshold | float64 | Support/resistance significance threshold                             | 1.5               | High market volatility: 1.2-1.5, Stable market: 1.5-2.0         |
+| topN                  | int     | Number of support/resistance levels to return                         | 2                 | Short-term trading: 1-2, Long-term analysis: 3-5                |
+| minDistancePercent    | float64 | Minimum price difference percentage between support/resistance levels | 0.5               | High volatility market: 0.3-0.5, Low volatility market: 0.5-1.0 |
 
-> Keep real secrets (passwords, tokens) in local `.env` or your shell, do not commit them.
+**Example Usage**：
 
-#### 3. Start backend services
-
-- **WebSocket client service (Go)**
-
-```bash
-cd /Users/anthony/Documents/github/okex-buddy/backend/go
-go run .
-```
-
-## 四大核心算法详解
-
-### 1. ComputeSupportResistance（支撑阻力位计算）
-
-**算法原理**：基于订单簿中的价格-数量聚集特征，识别具有显著买卖压力的价格水平。
-
-**技术实现**：
-1. **价格区间划分**：将订单簿价格范围划分为固定宽度的区间（建议50-100个区间）
-2. **累计订单量计算**：分别计算买单和卖单在各区间的加权金额（价格×数量）
-3. **显著性识别**：使用局部极大值检测识别支撑/阻力位，阈值为平均累计量的1.5-2.0倍
-4. **结果排序**：按累计量降序排序，返回Top-N（建议3-5个）支撑位和阻力位
-
-**应用场景**：
-- 技术分析，识别价格可能反转的关键水平
-- 为自动化交易策略提供关键价位参考
-- 监控市场重要支撑/阻力位的突破情况
-
-**参数配置**：
-| 参数 | 类型 | 描述 | 推荐值 | 调整建议 |
-|------|------|------|--------|----------|
-| binCount | int | 价格区间划分数量 | 50 | 高流动性交易对：30-50<br>低流动性交易对：20-30 |
-| significanceThreshold | float64 | 支撑/阻力位显著性阈值 | 1.5 | 市场波动大时：1.2-1.5<br>市场稳定时：1.5-2.0 |
-| topN | int | 返回的支撑/阻力位数量 | 2 | 短期交易：1-2<br>中长期分析：3-5 |
-| minDistancePercent | float64 | 支撑/阻力位之间的最小价格差异百分比 | 0.5 | 高波动市场：0.3-0.5<br>低波动市场：0.5-1.0 |
-
-**示例用法**：
 ```go
-// 计算BTC-USDT-SWAP的支撑和阻力位
+// Calculate support and resistance levels for BTC-USDT-SWAP
 supports, resistances, err := obManager.ComputeSupportResistance("BTC-USDT-SWAP", 50, 1.5, 2, 0.5)
 ```
 
-**输出示例**：
+**Output Example**：
+
 ```json
 {
   "supports": [45000.0, 44500.0],
@@ -180,16 +139,17 @@ supports, resistances, err := obManager.ComputeSupportResistance("BTC-USDT-SWAP"
 }
 ```
 
-### 2. ComputeLargeOrderDistribution（大额订单分布分析）
+###### 2. ComputeLargeOrderDistribution （大额订单分布分析）
 
-**算法原理**：通过识别大额订单（whale orders）的分布，推断机构或大户的交易意图，并使用非线性变换模型计算更准确的市场情绪指标。
+**Algorithm Principle**：By identifying the distribution of large orders (whale orders), infer the trading intentions of institutions or large traders, and use a non-linear transformation model to calculate more accurate market sentiment indicators.
 
-**技术实现**：
-1. **大额订单阈值确定**：使用订单金额分位数动态确定阈值（建议90-95分位数）
-2. **大额订单识别**：识别金额超过阈值的订单
-3. **价格距离加权**：越接近当前价格的订单权重越高，权重公式：$w(p) = e^{-\lambda \cdot \frac{|p - P_{\text{mid}}|}{P_{\text{mid}}}}$
-4. **多空力量对比**：计算加权后的买卖金额，得出原始多空倾向指标
-5. **非线性情绪变换**：使用带有死区阈值的非线性变换模型，更准确反映市场情绪强度
+**Technical Implementation**：
+
+1. **Large Order Threshold Determination**：Dynamically determine threshold using order amount quantile (recommended 90-95 percentile)
+2. **Large Order Identification**：Identify orders with amounts exceeding the threshold
+3. **Price Distance Weighting**：Orders closer to the current price have higher weights, weight formula: $w(p) = e^{-ambda \cdot \frac{|p - P\_{\text{mid}}|}{P\_{\text{mid}}}}$
+4. **Long-Short Power Comparison**：Calculate weighted buy and sell amounts to derive original long-short tendency indicator
+5. **Non-linear Sentiment Transformation**：Use a non-linear transformation model with deadzone threshold to more accurately reflect market sentiment intensity
 
 **应用场景**：
 - 监控大额资金流向，分析市场主力动向
@@ -203,13 +163,15 @@ supports, resistances, err := obManager.ComputeSupportResistance("BTC-USDT-SWAP"
 | decayLambda | float64 | 价格距离衰减因子 | 5.0 | 高流动性：3.0-5.0<br>低流动性：5.0-8.0 |
 | sentimentDeadzoneThreshold | float64 | 情绪中性区间阈值 | 0.3 | 低波动市场：0.2-0.3<br>高波动市场：0.3-0.5 |
 
-**示例用法**：
+**Example Usage**：
+
 ```go
 // 分析ETH-USDT-SWAP的大额订单分布
 largeBuyNotional, largeSellNotional, sentiment, err := obManager.ComputeLargeOrderDistribution("ETH-USDT-SWAP", 0.95, 5.0, 0.3)
 ```
 
-**输出示例**：
+**Output Example**：
+
 ```json
 {
   "bullPower": 123456.78,
@@ -228,7 +190,7 @@ largeBuyNotional, largeSellNotional, sentiment, err := obManager.ComputeLargeOrd
 
 ### 3. DetectDepthAnomaly（深度异常检测）
 
-**算法原理**：使用时间窗口统计和Z-score检测订单簿深度的突变，识别可能预示市场重大变动的订单簿结构变化。
+**Algorithm Principle**：Use time window statistics and Z-score to detect sudden changes in order book depth, identifying order book structure changes that may predict significant market movements.
 
 **技术实现**：
 1. **深度指标定义**：计算某一价格范围内（如当前价格的±0.5%）的总订单量
@@ -248,13 +210,15 @@ largeBuyNotional, largeSellNotional, sentiment, err := obManager.ComputeLargeOrd
 | windowSize | int | 历史数据窗口大小 | 30 | 高频交易：15-30<br>趋势跟踪：30-60 |
 | zThreshold | float64 | Z分数异常阈值 | 2.0 | 保守策略：2.5-3.0<br>平衡策略：2.0-2.5<br>激进策略：1.5-2.0 |
 
-**示例用法**：
+**Example Usage**：
+
 ```go
 // 检测SOL-USDT-SWAP的深度异常
 depthAnomaly, err := obManager.DetectDepthAnomaly("SOL-USDT-SWAP", 0.5, 30, 2.0)
 ```
 
-**输出示例**：
+**Output Example**：
+
 ```json
 {
   "anomaly": true,
@@ -265,7 +229,8 @@ depthAnomaly, err := obManager.DetectDepthAnomaly("SOL-USDT-SWAP", 0.5, 30, 2.0)
 }
 ```
 
-**日志输出示例**：
+**Log Output Example**：
+
 ```text
 Depth Anomaly Detected for DOGE-USDT-SWAP: Z-Score=-13.7423, Direction=decrease, Intensity=13.7423
 - Z值为-13.7423：这表示当前监控价格区间内的深度比历史平均值低了约13.74个标准差
@@ -303,13 +268,15 @@ Depth Anomaly Detected for DOGE-USDT-SWAP: Z-Score=-13.7423, Direction=decrease,
 | longWindowSeconds | int | 长期基准窗口（秒） | 1800 | 短期交易：900-1800<br>长期分析：1800-3600 |
 | slopeThreshold | float64 | 流动性下降斜率阈值 | -0.01 | 敏感检测：-0.005<br>稳定检测：-0.01 |
 
-**示例用法**：
+**Example Usage**：
+
 ```go
 // 检测DOGE-USDT-SWAP的流动性收缩情况
 liquidityShrinkData, err := obManager.DetectLiquidityShrinkage("DOGE-USDT-SWAP", 0.5, 30, 1800, -0.01)
 ```
 
-**输出示例**：
+**Output Example**：
+
 ```json
 {
   "warning": true,
@@ -321,7 +288,8 @@ liquidityShrinkData, err := obManager.DetectLiquidityShrinkage("DOGE-USDT-SWAP",
 }
 ```
 
-**日志输出示例**：
+**Log Output Example**：
+
 ```text
 Liquidity Shrinkage Warning for BTC-USDT-SWAP: Level=severe, Liquidity=27717.2699, Slope=-1.552002
 严重负趋势：触发此预警需要3个条件满足且斜率达到严重程度
@@ -352,7 +320,8 @@ liquidityData, err := obManager.DetectLiquidityShrinkage("BTC-USDT-SWAP", 0.2, 2
 // }
 ```
 
-### 2. 趋势跟踪策略
+1. 趋势跟踪策略
+
 ```go
 // 识别稳定的市场趋势和关键价位
 supports, resistances, spread, err := obManager.ComputeSupportResistance("ETH-USDT-SWAP", 60, 1.8, 3, 0.8)
@@ -368,7 +337,8 @@ liquidityData, err := obManager.DetectLiquidityShrinkage("ETH-USDT-SWAP", 0.8, 6
 // }
 ```
 
-### 3. 机构资金流向分析
+1. 机构资金流向分析
+
 ```go
 // 深度分析大额订单分布和市场情绪
 largeBuyNotional, largeSellNotional, sentiment, err := obManager.ComputeLargeOrderDistribution("SOL-USDT-SWAP", 0.95, 5.0, 0.3)
@@ -384,7 +354,8 @@ depthAnomaly, err := obManager.DetectDepthAnomaly("SOL-USDT-SWAP", 1.0, 40, 2.2)
 // }
 ```
 
-### 4. 风险管理策略
+1. 风险管理策略
+
 ```go
 // 综合风险监控体系
 liquidityData, err := obManager.DetectLiquidityShrinkage("DOGE-USDT-SWAP", 0.5, 30, 1800, -0.01)
@@ -401,14 +372,8 @@ largeBuy, largeSell, sentiment, err := obManager.ComputeLargeOrderDistribution("
 // }
 ```
 
-## 性能优化建议
+###### 参数动态调整
 
-### 1. 计算资源分配
-- **高频交易**：优先保证深度异常检测和支撑阻力位计算的实时性
-- **趋势分析**：重点优化流动性收缩预警和大额订单分析
-- **批量处理**：可将部分非紧急计算安排在低峰时段执行
-
-### 2. 参数动态调整
 ```go
 // 根据市场波动性动态调整参数
 func adjustParameters(marketVolatility float64) (binCount int, zThreshold float64, slopeThreshold float64) {
@@ -421,16 +386,3 @@ func adjustParameters(marketVolatility float64) (binCount int, zThreshold float6
 }
 ```
 
-### 3. 内存管理优化
-- 使用时间窗口工具类自动管理过期数据
-- 合理设置各算法的历史数据窗口大小
-- 定期清理无用的历史计算结果
-
-建议根据具体的交易场景、市场条件和个人风险偏好，灵活组合使用这四个核心算法，以构建最适合的量化交易策略。
-
-
-向 Redis List 推送交易信号：
-
-```text
-redis-cli LPUSH trading_signals:momentum_strategy '{"signal_id":"sig_011","strategy_name":"momentum_strategy","inst_id":"10461","side":"buy","ord_type":"market","pos_side":"long","sz":"0.1","timestamp":1708387200000}'
-```
