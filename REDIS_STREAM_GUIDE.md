@@ -9,6 +9,3 @@ XTRIM signals MAXLEN 0
 
 # 测试消息
 XADD signals "*" timestamp "1775740000000" inst_id "SOL-USDT-SWAP" bar "15m" prediction "1" price "120.5" line1 "0.015" line2 "0.040"
-
-# 编译为可执行文件
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o okex-buddy main.go 
