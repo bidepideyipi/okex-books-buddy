@@ -79,7 +79,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 		MAX_SIZE, _ = strconv.ParseFloat(eth_max_size, 64)
 		PER_SIZE, _ = strconv.ParseFloat(eth_per_size, 64)
 
-		if posSz > float64(MAX_SIZE) {
+		if posSz >= float64(MAX_SIZE) {
 			log.Printf("仓位已满，posSz=: %f", posSz)
 			return nil
 		}
@@ -102,7 +102,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 		// 	return nil
 		// }
 
-		if msg.Probabilities[msg.Prediction] < 0.55 {
+		if msg.Probabilities[msg.Prediction] < 0.65 {
 			log.Printf("概率过低: %s, probability=%f", msg.Prediction, msg.Probabilities[msg.Prediction])
 			return nil
 		}
@@ -206,3 +206,32 @@ func closeOrder(okRest *rest.OKExHTTPClient, instId string, side int8, sz string
 		log.Printf("平仓失败：%v\n", err)
 	}
 }
+
+// func createAlgoOrd(okRest *rest.OKExHTTPClient, price float64, line float64, instId string, posSide string, sz string) {
+// 	var slTriggerPx string
+// 	var tpTriggerPx string
+// 	if "long" == posSide {
+// 		slTriggerPx = strconv.FormatFloat(price*(1-line), 'f', 2, 64)
+// 		tpTriggerPx = strconv.FormatFloat(price*(1+line), 'f', 2, 64)
+// 	} else {
+// 		slTriggerPx = strconv.FormatFloat(price*(1+line), 'f', 2, 64)
+// 		tpTriggerPx = strconv.FormatFloat(price*(1-line), 'f', 2, 64)
+// 	}
+
+// 	_, err := okRest.PlaceAlgoOrder(&rest.PlaceAlgoOrderRequest{
+// 		InstID:      instId,
+// 		TdMode:      "cross",
+// 		Side:        "sell",
+// 		PosSide:     posSide,
+// 		OrdType:     "conditional",
+// 		Sz:          sz,
+// 		TpTriggerPx: tpTriggerPx,
+// 		TpOrdPx:     "-1",
+// 		SlTriggerPx: slTriggerPx,
+// 		SlOrdPx:     "-1",
+// 	})
+
+// 	if err != nil {
+// 		log.Printf("创建止盈止损订单失败：%v\n", err)
+// 	}
+// }

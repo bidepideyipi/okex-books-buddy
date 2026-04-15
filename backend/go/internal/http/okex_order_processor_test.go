@@ -8,6 +8,34 @@ import (
 	rest "github.com/supermancell/okex-buddy/internal/http"
 )
 
+// 市价开多 和现在handler_redis_stream.go 中的openOrder 保持一致
+func TestOpenOrder(t *testing.T) {
+	app := assembly.NewAssembly()
+	if err := app.LoadMongo(); err != nil {
+		t.Fatal(err)
+	}
+
+	app.LoadOkxRest()
+
+	resp, err := app.OkxClient.PlaceOrder(&rest.PlaceOrderRequest{
+		InstID:  "ETH-USDT-SWAP",
+		TdMode:  "cross",
+		Side:    "buy",
+		PosSide: "long",
+		OrdType: "market",
+		//Px:             strconv.FormatFloat(price, 'f', 2, 64),
+		Sz: "0.1",
+		//AttachAlgoOrds: []map[string]string{algoOrd},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//resp: &{0  [{3472763460055277568   0 Order placed}]}
+	fmt.Printf("resp: %v\n", resp)
+}
+
 func TestOrderPlace(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
@@ -116,6 +144,9 @@ func TestTriggerSell(t *testing.T) {
 		Sz:          "0.2",
 		TpTriggerPx: "2450",
 		TpOrdPx:     "-1",
+		SlTriggerPx: "2300",
+		SlOrdPx:     "-1",
+		//二者只能写一个，同时写取其后者
 	})
 
 	if err != nil {
@@ -125,7 +156,7 @@ func TestTriggerSell(t *testing.T) {
 	fmt.Printf("resp: %v\n", resp)
 }
 
-func TestCancelOrder1(t *testing.T) {
+func TestCancelOrder(t *testing.T) {
 	app := assembly.NewAssembly()
 	if err := app.LoadMongo(); err != nil {
 		t.Fatal(err)
