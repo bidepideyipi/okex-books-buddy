@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	MAX_SIZE float64 = 1.0
-	PER_SIZE float64 = 0.1
+	//推荐的配置，当数据库不存在交易配置时，默认使用该配置
+	//遵循了棋经十诀中的“慎勿轻速”，避免因为交易速度过快导致仓位风险变重
+	MAX_SIZE float64 = 2.0
+	PER_SIZE float64 = 0.5
 	SIDE     int8    = 0
 )
 
@@ -63,21 +65,35 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 		//方向不同了
 		if posSz > 0 && SIDE != 0 && NEW_SIDE != SIDE {
+			//当预测值为中立时，PredictionLow, 和PredictionHigh 也是中立则不平仓 BEGIN
+			//是为了防止太敏感，导致趋势失败
+			if NEW_SIDE == 0 && SIDE == 1 && msg.PredictionLow == "3" {
+				log.Printf("做多时预测值为中立，PredictionLow == 3，不平仓")
+				return nil
+			}
+
+			if NEW_SIDE == 0 && SIDE == -1 && msg.PredictionHigh == "1" {
+				log.Printf("做空时预测值为中立，PredictionHigh == 1，不平仓")
+				return nil
+			}
+			//当预测值为中立时，PredictionLow, 和PredictionHigh 也是中立则不平仓 END
+
+			//遵循了棋经十诀中的“逢危需弃”，但可能影响到趋势的持续性
 			log.Printf("[INFO] 方向不同了结束交易: inst=%s, prediction=%s, price=%f.2f, posSz=%f",
 				msg.InstID, msg.Prediction, msg.Price, posSz)
 			closeOrder(okRest, msg.InstID, SIDE, strconv.FormatFloat(posSz, 'f', 1, 64))
 			return nil
 		}
+
 		//获取交易配置
 		eth_max_size, eth_per_size, err := mongoClient.GetTradeSettingsConfig()
 		if err != nil {
-			log.Printf("查询交易配置失败: %v", err)
-			return nil
+			log.Printf("查询交易配置失败，使用默认配置: %v", err)
+		} else {
+			//将eth_max_size和eth_per_size转换为float64
+			MAX_SIZE, _ = strconv.ParseFloat(eth_max_size, 64)
+			PER_SIZE, _ = strconv.ParseFloat(eth_per_size, 64)
 		}
-
-		//将eth_max_size和eth_per_size转换为float64
-		MAX_SIZE, _ = strconv.ParseFloat(eth_max_size, 64)
-		PER_SIZE, _ = strconv.ParseFloat(eth_per_size, 64)
 
 		if posSz >= float64(MAX_SIZE) {
 			log.Printf("仓位已满，posSz=: %f", posSz)
