@@ -13,9 +13,10 @@ import (
 var (
 	//推荐的配置，当数据库不存在交易配置时，默认使用该配置
 	//遵循了棋经十诀中的“慎勿轻速”，避免因为交易速度过快导致仓位风险变重
-	MAX_SIZE float64 = 2.0
-	PER_SIZE float64 = 0.5
-	SIDE     int8    = 0
+	MAX_SIZE  float64 = 2.0
+	PER_SIZE  float64 = 0.5
+	POS_SIDE  string  = ""
+	PER_PRICE float64 = 0.0
 )
 
 func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKExHTTPClient) common.StreamSignalHandler {
@@ -44,44 +45,41 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 		}
 
 		var posSz float64 = 0
+		var instID string = "ETH-USDT-SWAP"
+
 		for _, p := range positions {
-			posSz += p.Pos
+			//判断是否是当前InstID的Position
+			if p.InstID != instID {
+				continue
+			}
+
+			POS_SIDE = p.PosSide
+			posSz = p.Pos
+			break
 		}
 
-		var NEW_SIDE int8 = 0
+		var NEW_SIDE string = ""
 		//预测值处理
 		switch msg.Prediction {
 		case "5":
-			NEW_SIDE = 1
+			NEW_SIDE = "long"
 		case "4":
-			NEW_SIDE = 1
+			NEW_SIDE = "long"
 		case "2":
-			NEW_SIDE = -1
+			NEW_SIDE = "short"
 		case "1":
-			NEW_SIDE = -1
+			NEW_SIDE = "short"
 		default:
-			NEW_SIDE = 0
+			NEW_SIDE = POS_SIDE
 		}
 
 		//方向不同了
-		if posSz > 0 && SIDE != 0 && NEW_SIDE != SIDE {
-			//当预测值为中立时，PredictionLow, 和PredictionHigh 也是中立则不平仓 BEGIN
-			//是为了防止太敏感，导致趋势失败
-			if NEW_SIDE == 0 && SIDE == 1 && msg.PredictionLow == "3" {
-				log.Printf("做多时预测值为中立，PredictionLow == 3，不平仓")
-				return nil
-			}
-
-			if NEW_SIDE == 0 && SIDE == -1 && msg.PredictionHigh == "1" {
-				log.Printf("做空时预测值为中立，PredictionHigh == 1，不平仓")
-				return nil
-			}
-			//当预测值为中立时，PredictionLow, 和PredictionHigh 也是中立则不平仓 END
+		if posSz > 0 && POS_SIDE != NEW_SIDE {
 
 			//遵循了棋经十诀中的“逢危需弃”，但可能影响到趋势的持续性
 			log.Printf("[INFO] 方向不同了结束交易: inst=%s, prediction=%s, price=%f.2f, posSz=%f",
 				msg.InstID, msg.Prediction, msg.Price, posSz)
-			closeOrder(okRest, msg.InstID, SIDE, strconv.FormatFloat(posSz, 'f', 1, 64))
+			CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64))
 			return nil
 		}
 
@@ -118,36 +116,54 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 		// 	return nil
 		// }
 
-		if msg.Probabilities[msg.Prediction] < 0.65 {
+		// 反向相同的情况下消除噪声
+		if msg.Probabilities[msg.Prediction] < 0.5 {
 			log.Printf("概率过低: %s, probability=%f", msg.Prediction, msg.Probabilities[msg.Prediction])
+			return nil
+		}
+
+		if msg.Probabilities[msg.Prediction] < 0.75 {
+			PER_SIZE = PER_SIZE / 4
+			log.Printf("概率低需要谨慎交易: %s, probability=%f, 调低PER_SIZE=%s", msg.Prediction, msg.Probabilities[msg.Prediction], strconv.FormatFloat(PER_SIZE, 'f', 2, 64))
+		}
+
+		if POS_SIDE == "long" && PER_PRICE != 0.0 && msg.Price > PER_PRICE {
+			//防止加码追高
+			log.Panicf("Price=%s 防止加码追多", strconv.FormatFloat(msg.Price, 'f', 2, 64))
+			return nil
+		}
+
+		if POS_SIDE == "short" && PER_PRICE != 0.0 && msg.Price < PER_PRICE {
+			//防止加码追高
+			log.Panicf("Price=%s 防止加码追空", strconv.FormatFloat(msg.Price, 'f', 2, 64))
 			return nil
 		}
 
 		//预测值处理
 		switch msg.Prediction {
 		case "5":
-			SIDE = 1
-			log.Printf("[INFO] 预测暴涨下多单: inst=%s, prediction=%s, probability=%f, price=%f.2f",
+			log.Printf("[INFO] 预测暴涨下多单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2*2, msg.InstID, "long")
+			PER_PRICE = msg.Price
 			return nil
 		case "4":
-			SIDE = 1
-			log.Printf("[INFO] 预测涨下多单: inst=%s, prediction=%s, probability=%f, price=%f.2f",
+			log.Printf("[INFO] 预测涨下多单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2, msg.InstID, "long")
+			PER_PRICE = msg.Price
 			return nil
 		case "2":
-			SIDE = -1
-			log.Printf("[INFO] 预测跌下空单: inst=%s, prediction=%s, probability=%f, price=%f.2f",
+			log.Printf("[INFO] 预测跌下空单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2, msg.InstID, "short")
+			PER_PRICE = msg.Price
 			return nil
 		case "1":
-			SIDE = -1
-			log.Printf("[INFO] 预测暴跌下空单: inst=%s, prediction=%s, probability=%f, price=%f.2f",
+			log.Printf("[INFO] 预测暴跌下空单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2*2, msg.InstID, "short")
+			PER_PRICE = msg.Price
 			return nil
 		default:
 			log.Printf("[WARN] Unknown prediction: %s", msg.Prediction)
@@ -197,17 +213,9 @@ func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId 
 	}
 }
 
-func closeOrder(okRest *rest.OKExHTTPClient, instId string, side int8, sz string) {
+func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz string) {
 
-	var posSide string
-	switch side {
-	case 1:
-		posSide = "long"
-	case -1:
-		posSide = "short"
-	default:
-		return
-	}
+	log.Printf("[INFO] 平仓: inst=%s, posSide=%s, sz=%s", instId, posSide, sz)
 
 	_, err := okRest.PlaceOrder(&rest.PlaceOrderRequest{
 		InstID:  instId,

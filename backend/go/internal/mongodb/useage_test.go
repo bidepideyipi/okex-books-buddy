@@ -23,9 +23,24 @@ func TestGetActivePositions(t *testing.T) {
 		t.Fatalf("Failed to get active positions from MongoDB: %v", err)
 	}
 	t.Log("Active positions:", positions)
+
+	var posSz float64 = 0
+	var posSide string = ""
+	var instID string = "ETH-USDT-SWAP"
+
+	for _, p := range positions {
+		//判断是否是当前InstID的Position
+		if p.InstID != instID {
+			continue
+		}
+
+		posSide = p.PosSide
+		posSz += p.Pos
+		break
+	}
+
+	t.Log("Active position:", posSide, posSz)
 }
-
-
 
 func setupMongoDB(t *testing.T) *mongodb.Client {
 	t.Helper()

@@ -31,7 +31,8 @@
             "env": {
                 "PATH": "/usr/local/opt/go@1.23/bin:/usr/local/opt/go@1.23/libexec/bin:${env:PATH}",
                 "USE_PROXY": "true",
-                "PROXY_ADDR": "127.0.0.1:7890",
+                "PROXY_ADDR": "127.0.0.1:7898",
+                "HTTP_PROXY_ADDR": "127.0.0.1:7899",
                 "ENABLE_PUBLIC_WS": "false",
                 "ENABLE_BUSINESS_WS": "false",
                 "ENABLE_PRIVATE_WS": "true",

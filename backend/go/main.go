@@ -22,6 +22,9 @@ func main() {
 
 	cfg = app.Config
 	log.Println("OKEx Buddy - Combined WebSocket Client and API Server")
+	log.Println("Version: 1.0.2 (2026-05-12)")
+	log.Println("Remark: 1.方向相同的时候才过滤低置信度(<50%)")
+	log.Println("Remark: 2.做价格比较，防止追高追低")
 	log.Printf("Config loaded: Redis=%s, OKEx WS=%s, API HTTP=%s\n", cfg.Redis.Addr, cfg.OKEX.PublicWSURL, cfg.APIHTTPAddr)
 	log.Printf("Proxy config: USE_PROXY=%v, PROXY_ADDR=%s", cfg.OKEX.UseProxy, cfg.OKEX.ProxyAddr)
 	log.Printf("WebSocket enable: PublicWS=%v, BusinessWS=%v, PrivateWS=%v", cfg.OKEX.EnablePublicWS, cfg.OKEX.EnableBusinessWS, cfg.OKEX.EnablePrivateWS)

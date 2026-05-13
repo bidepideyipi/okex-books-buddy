@@ -92,7 +92,7 @@ func TestSellMarket(t *testing.T) {
 		Side:    "sell",
 		PosSide: "long",
 		OrdType: "market",
-		Sz:      "0.2",
+		Sz:      "0.1",
 	})
 
 	if err != nil {

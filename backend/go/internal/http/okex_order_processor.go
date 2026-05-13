@@ -41,16 +41,18 @@ func NewOKExHTTPClient(config ws.OKExConfig) *OKExHTTPClient {
 }
 
 // NewOKExHTTPClientWithProxy creates a new OKEx HTTP client with proxy support
-func NewOKExHTTPClientWithProxy(config ws.OKExConfig, useProxy bool, proxyAddr string) *OKExHTTPClient {
+func NewOKExHTTPClientWithProxy(config ws.OKExConfig, proxyAddr string) *OKExHTTPClient {
+
+	log.Printf("useProxy: %v, proxyAddr: %s", true, proxyAddr)
 	client := &OKExHTTPClient{
 		baseURL:    common.OKEX_API_BASE_URL,
 		config:     config,
-		useProxy:   useProxy,
+		useProxy:   true,
 		proxyAddr:  proxyAddr,
 		timeOffset: 0,
 	}
 
-	if useProxy && proxyAddr != "" {
+	if proxyAddr != "" {
 		proxyURL, err := url.Parse("http://" + proxyAddr)
 		if err != nil {
 			log.Printf("Failed to parse proxy URL: %v", err)

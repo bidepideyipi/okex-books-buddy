@@ -76,7 +76,11 @@ func (a *Assembly) LoadOkxRest() error {
 		Passphrase: passphrase,
 	}
 
-	a.OkxClient = rest.NewOKExHTTPClientWithProxy(privateConfig, a.Config.OKEX.UseProxy, a.Config.OKEX.HTTPProxyAddr)
+	if a.Config.OKEX.UseProxy {
+		a.OkxClient = rest.NewOKExHTTPClientWithProxy(privateConfig, a.Config.OKEX.HTTPProxyAddr)
+	} else {
+		a.OkxClient = rest.NewOKExHTTPClient(privateConfig)
+	}
 
 	log.Println("Syncing time with OKEx server for HTTP client...")
 	offset, err := a.OkxClient.SyncServerTime()
