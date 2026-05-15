@@ -11,3 +11,4 @@ backend/go/bin/*
 backend/go/bin/okex-buddy
 __debug_bin*
 debug.*
+backend/go/okex-buddy

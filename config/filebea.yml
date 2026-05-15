@@ -1,0 +1,64 @@
+
+sudo tee /etc/filebeat/filebeat.yml << EOF
+# /etc/filebeat/filebeat.yml
+# 1. 输入配置：采集 journald 日志
+filebeat.inputs:
+  - type: journald
+    id: okex_buddy_journal
+    # 可选：限定采集特定服务的日志
+    include_matches:
+      - "_SYSTEMD_UNIT=okex-buddy.service"
+      - "SYSLOG_IDENTIFIER=okex-buddy"
+    seek: tail
+    # 从日志末尾开始，不读取历史日志
+
+# 2. 处理器配置：过滤只保留包含 [error] 的行
+processors:
+  # 方法一：丢弃所有不包含 [error] 的事件（推荐）
+  - drop_event:
+      when:
+        not:
+          contains:
+            message: "[error]"
+  
+  # 方法二：使用正则表达式匹配（更灵活）
+  # - drop_event:
+  #     when:
+  #       not:
+  #         regexp:
+  #           message: ".*\[error\].*"
+  
+  # 可选：添加标签便于识别
+  - add_fields:
+      fields:
+        log_level: "error"
+        source: "journald"
+
+# 3. 输出配置：发送到 Redis list
+output.redis:
+  enabled: true
+  hosts: ["localhost:6379"]  # Redis 服务器地址
+  key: "filebeat:errors"     # Redis list 的 key 名称
+  datatype: list             # 数据类型必须为 list
+  db: 1                      # Redis 数据库编号
+  timeout: 1s                # 连接超时时间
+  
+  # 可选：如果 Redis 需要密码认证
+  # password: "your_redis_password"
+  
+  # 可选：负载均衡和重试配置
+  loadbalance: true
+  max_retries: 3
+  backoff:
+    init: 1s
+    max: 60s
+
+# 4. 其他全局配置
+name: "filebeat-journald"
+tags: ["journald", "error-logs"]
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 5s
+
+EOF
