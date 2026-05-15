@@ -17,28 +17,28 @@ processors:
   # 方法一：丢弃所有不包含 [error] 的事件（推荐）
   - drop_event:
       when:
-        not:
-          contains:
-            message: "[error]"
+        and:
+          - not:
+              contains:
+                message: "[ERROR]"
+          - not:
+              contains:
+                message: "[NOTICE]"
   
-  # 方法二：使用正则表达式匹配（更灵活）
-  # - drop_event:
-  #     when:
-  #       not:
-  #         regexp:
-  #           message: ".*\[error\].*"
-  
-  # 可选：添加标签便于识别
-  - add_fields:
-      fields:
-        log_level: "error"
-        source: "journald"
+  # 2. 精简字段
+  - drop_fields:
+      fields: [
+        "agent", "ecs", "input", "journald", 
+        "log", "process", "user", "event", 
+        "@metadata", "fields", "tags", "systemd"
+      ]
+      ignore_missing: true
 
 # 3. 输出配置：发送到 Redis list
 output.redis:
   enabled: true
   hosts: ["localhost:6379"]  # Redis 服务器地址
-  key: "filebeat:errors"     # Redis list 的 key 名称
+  key: "filebeat:notice"     # Redis list 的 key 名称
   datatype: list             # 数据类型必须为 list
   db: 1                      # Redis 数据库编号
   timeout: 1s                # 连接超时时间

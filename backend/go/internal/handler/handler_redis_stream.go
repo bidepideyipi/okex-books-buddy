@@ -216,6 +216,8 @@ func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId 
 	if err != nil {
 		log.Printf("[ERROR] 开仓失败：%v\n", err)
 	}
+
+	log.Printf("[NOTICE] 开仓成功: inst=%s, posSide=%s, sz=%s", instId, posSide, strconv.FormatFloat(PER_SIZE, 'f', 1, 64))
 }
 
 func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz string) {
@@ -239,6 +241,8 @@ func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz s
 	if err != nil {
 		log.Printf("[ERROR] 平仓失败：%v\n", err)
 	}
+
+	log.Printf("[NOTICE] 平仓成功: inst=%s, posSide=%s, sz=%s", instId, posSide, sz)
 }
 
 // func createAlgoOrd(okRest *rest.OKExHTTPClient, price float64, line float64, instId string, posSide string, sz string) {
