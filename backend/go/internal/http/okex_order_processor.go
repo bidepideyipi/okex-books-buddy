@@ -64,7 +64,6 @@ func NewOKExHTTPClientWithProxy(config ws.OKExConfig, proxyAddr string) *OKExHTT
 				},
 				Timeout: 30 * time.Second,
 			}
-			log.Printf("Using HTTP proxy for API requests: %s", proxyAddr)
 		}
 	} else {
 		client.httpClient = &http.Client{Timeout: 30 * time.Second}

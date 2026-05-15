@@ -197,10 +197,15 @@ func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId 
 		"tpTriggerPxType":   "last",
 	}
 
+	side := "buy"
+	if "short" == posSide {
+		side = "sell"
+	}
+
 	_, err := okRest.PlaceOrder(&rest.PlaceOrderRequest{
 		InstID:  instId,
 		TdMode:  "cross",
-		Side:    "buy",
+		Side:    side,
 		PosSide: posSide,
 		OrdType: "market",
 		//Px:             strconv.FormatFloat(price, 'f', 2, 64),
@@ -209,7 +214,7 @@ func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId 
 	})
 
 	if err != nil {
-		log.Printf("开仓失败：%v\n", err)
+		log.Printf("[ERROR] 开仓失败：%v\n", err)
 	}
 }
 
@@ -217,17 +222,22 @@ func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz s
 
 	log.Printf("[INFO] 平仓: inst=%s, posSide=%s, sz=%s", instId, posSide, sz)
 
+	side := "sell"
+	if "short" == posSide {
+		side = "buy"
+	}
+
 	_, err := okRest.PlaceOrder(&rest.PlaceOrderRequest{
 		InstID:  instId,
 		TdMode:  "cross",
-		Side:    "sell",
+		Side:    side,
 		PosSide: posSide,
 		OrdType: "market",
 		Sz:      sz,
 	})
 
 	if err != nil {
-		log.Printf("平仓失败：%v\n", err)
+		log.Printf("[ERROR] 平仓失败：%v\n", err)
 	}
 }
 

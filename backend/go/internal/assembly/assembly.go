@@ -82,6 +82,7 @@ func (a *Assembly) LoadOkxRest() error {
 		a.OkxClient = rest.NewOKExHTTPClient(privateConfig)
 	}
 
+	log.Printf("OKEx HTTP client base URL: %s", common.OKEX_API_BASE_URL)
 	log.Println("Syncing time with OKEx server for HTTP client...")
 	offset, err := a.OkxClient.SyncServerTime()
 	if err != nil {
