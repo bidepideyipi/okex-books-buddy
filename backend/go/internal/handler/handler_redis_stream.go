@@ -13,10 +13,11 @@ import (
 var (
 	//推荐的配置，当数据库不存在交易配置时，默认使用该配置
 	//遵循了棋经十诀中的“慎勿轻速”，避免因为交易速度过快导致仓位风险变重
-	MAX_SIZE  float64 = 2.0
-	PER_SIZE  float64 = 0.5
-	POS_SIDE  string  = ""
-	PER_PRICE float64 = 0.0
+	MAX_SIZE    float64 = 2.0
+	PER_SIZE    float64 = 0.5
+	POS_SIDE    string  = ""
+	PER_PRICE   float64 = 0.0
+	GRIDE_RTIDO float64 = 0.001 //每网格间距0.1%
 )
 
 func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKExHTTPClient) common.StreamSignalHandler {
@@ -46,6 +47,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 		var posSz float64 = 0
 		var instID string = "ETH-USDT-SWAP"
+		var winRatio float64 = 0.0
 
 		for _, p := range positions {
 			//判断是否是当前InstID的Position
@@ -55,6 +57,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 			POS_SIDE = p.PosSide
 			posSz = p.Pos
+			winRatio = p.UplRatio / float64(p.Lever)
 			break
 		}
 
@@ -95,6 +98,10 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 		if posSz >= float64(MAX_SIZE) {
 			log.Printf("仓位已满，posSz=: %f", posSz)
+
+			if winRatio >= GRIDE_RTIDO*2 { //减轻压力，增加操作空间
+				CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz/2, 'f', 1, 64))
+			}
 			return nil
 		}
 
@@ -127,15 +134,15 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			log.Printf("概率低需要谨慎交易: %s, probability=%f, 调低PER_SIZE=%s", msg.Prediction, msg.Probabilities[msg.Prediction], strconv.FormatFloat(PER_SIZE, 'f', 2, 64))
 		}
 
-		if POS_SIDE == "long" && PER_PRICE != 0.0 && msg.Price > PER_PRICE {
+		if POS_SIDE == "long" && PER_PRICE != 0.0 && msg.Price > PER_PRICE*(1-GRIDE_RTIDO) {
 			//防止加码追高
-			log.Panicf("Price=%s 防止加码追多", strconv.FormatFloat(msg.Price, 'f', 2, 64))
+			log.Printf("Price=%s 防止频繁加码追多", strconv.FormatFloat(msg.Price, 'f', 2, 64))
 			return nil
 		}
 
-		if POS_SIDE == "short" && PER_PRICE != 0.0 && msg.Price < PER_PRICE {
+		if POS_SIDE == "short" && PER_PRICE != 0.0 && msg.Price < PER_PRICE*(1+GRIDE_RTIDO) {
 			//防止加码追高
-			log.Panicf("Price=%s 防止加码追空", strconv.FormatFloat(msg.Price, 'f', 2, 64))
+			log.Printf("Price=%s 防止频繁加码追空", strconv.FormatFloat(msg.Price, 'f', 2, 64))
 			return nil
 		}
 

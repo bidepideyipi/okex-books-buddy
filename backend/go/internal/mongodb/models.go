@@ -78,8 +78,8 @@ type Position struct {
 	PosCcy      string  `bson:"pos_ccy"`
 	PnlRatio    string  `bson:"pnl_ratio"`
 	Upl         string  `bson:"upl"`
-	UplRatio    string  `bson:"upl_ratio"`
-	Lever       string  `bson:"lever"`
+	UplRatio    float64 `bson:"upl_ratio"`
+	Lever       int     `bson:"lever"`
 	LiqPx       string  `bson:"liq_px"`
 	MarkPx      string  `bson:"mark_px"`
 	CTime       string  `bson:"c_time"`

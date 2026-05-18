@@ -70,11 +70,11 @@ func ParsePosition(posMap map[string]interface{}) (*mongodb.Position, error) {
 	}
 
 	if uplRatio, ok := posMap["uplRatio"].(string); ok {
-		position.UplRatio = uplRatio
+		position.UplRatio, _ = strconv.ParseFloat(uplRatio, 64)
 	}
 
 	if lever, ok := posMap["lever"].(string); ok {
-		position.Lever = lever
+		position.Lever, _ = strconv.Atoi(lever)
 	}
 
 	if liqPx, ok := posMap["liqPx"].(string); ok {

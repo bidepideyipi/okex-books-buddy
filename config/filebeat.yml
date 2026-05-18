@@ -10,6 +10,7 @@ filebeat.inputs:
       - "_SYSTEMD_UNIT=okex-buddy.service"
       - "SYSLOG_IDENTIFIER=okex-buddy"
     seek: tail
+    encoding: gb18030
     # 从日志末尾开始，不读取历史日志
 
 # 2. 处理器配置：过滤只保留包含 [error] 的行
