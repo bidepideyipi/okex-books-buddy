@@ -85,8 +85,8 @@ systemctl restart systemd-journald
 
 # mongodb 修改配置
 ```bash
-mongosh "mongodb://127.0.0.1:27017/technical_analysis" --eval 'db.config.updateOne({ key: "eth_max_size" }, { $set: { value: "10" } })'
-mongosh "mongodb://127.0.0.1:27017/technical_analysis" --eval 'db.config.updateOne({ key: "eth_per_size" }, { $set: { value: "0.5" } })'
+mongosh "mongodb://127.0.0.1:27017/technical_analysis" --eval 'db.config.updateOne({ key: "eth_max_size" }, { $set: { value: "15" } })'
+mongosh "mongodb://127.0.0.1:27017/technical_analysis" --eval 'db.config.updateOne({ key: "eth_per_size" }, { $set: { value: "5" } })'
 mongosh "mongodb://127.0.0.1:27017/technical_analysis" --eval 'db.config.find({ item: "tradeSettings" })'
 ```
 

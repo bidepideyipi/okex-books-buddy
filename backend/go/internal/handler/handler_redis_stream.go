@@ -82,7 +82,10 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			//遵循了棋经十诀中的“逢危需弃”，但可能影响到趋势的持续性
 			log.Printf("[INFO] 方向不同了结束交易: inst=%s, prediction=%s, price=%f.2f, posSz=%f",
 				msg.InstID, msg.Prediction, msg.Price, posSz)
-			CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64))
+			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
+				//平仓成功后，重置PER_PRICE
+				PER_PRICE = 0.0
+			}
 			return nil
 		}
 
@@ -100,7 +103,10 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			log.Printf("仓位已满，posSz=: %f", posSz)
 
 			if winRatio >= GRIDE_RTIDO*2 { //减轻压力，增加操作空间
-				CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz/2, 'f', 1, 64))
+				if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz/2, 'f', 1, 64)) {
+					//平仓成功后，重置PER_PRICE
+					PER_PRICE = 0.0
+				}
 			}
 			return nil
 		}
@@ -227,7 +233,7 @@ func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId 
 	log.Printf("[NOTICE] 开仓成功: inst=%s, posSide=%s, sz=%s", instId, posSide, strconv.FormatFloat(PER_SIZE, 'f', 1, 64))
 }
 
-func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz string) {
+func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz string) bool {
 
 	log.Printf("[INFO] 平仓: inst=%s, posSide=%s, sz=%s", instId, posSide, sz)
 
@@ -247,9 +253,11 @@ func CloseOrder(okRest *rest.OKExHTTPClient, instId string, posSide string, sz s
 
 	if err != nil {
 		log.Printf("[ERROR] 平仓失败：%v\n", err)
+		return false
 	}
 
 	log.Printf("[NOTICE] 平仓成功: inst=%s, posSide=%s, sz=%s", instId, posSide, sz)
+	return true
 }
 
 // func createAlgoOrd(okRest *rest.OKExHTTPClient, price float64, line float64, instId string, posSide string, sz string) {
