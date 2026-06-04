@@ -13,11 +13,13 @@ import (
 var (
 	//推荐的配置，当数据库不存在交易配置时，默认使用该配置
 	//遵循了棋经十诀中的“慎勿轻速”，避免因为交易速度过快导致仓位风险变重
-	MAX_SIZE    float64 = 2.0
-	PER_SIZE    float64 = 0.5
-	POS_SIDE    string  = ""
-	PER_PRICE   float64 = 0.0
-	GRIDE_RTIDO float64 = 0.001 //每网格间距0.1%
+	MAX_SIZE      float64 = 2.0
+	PER_SIZE      float64 = 0.5
+	POS_SIDE      string  = ""
+	PER_PRICE     float64 = 0.0
+	GRIDE_RTIDO   float64 = 0.001 //每网格间距0.1%
+	MAX_WIN_RATIO float64 = 0.0
+	MIN_WIN_RATIO float64 = 0.003 //最小盈利
 )
 
 func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKExHTTPClient) common.StreamSignalHandler {
@@ -58,6 +60,11 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			POS_SIDE = p.PosSide
 			posSz = p.Pos
 			winRatio = p.UplRatio / float64(p.Lever)
+
+			if winRatio > MAX_WIN_RATIO {
+				//记录最高的
+				MAX_WIN_RATIO = winRatio
+			}
 			break
 		}
 
@@ -85,6 +92,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
 				//平仓成功后，重置PER_PRICE
 				PER_PRICE = 0.0
+				MAX_WIN_RATIO = 0.0
 			}
 			return nil
 		}
@@ -99,6 +107,18 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			PER_SIZE, _ = strconv.ParseFloat(eth_per_size, 64)
 		}
 
+		// 移动止盈，当盈利回落了3/10时，平仓
+		if posSz > 0 && winRatio > MIN_WIN_RATIO && winRatio < MAX_WIN_RATIO*0.7 {
+			log.Printf("[INFO] 移动止盈，当盈利回落了3/10时，平仓: inst=%s, prediction=%s, price=%f.2f, posSz=%f",
+				msg.InstID, msg.Prediction, msg.Price, posSz)
+			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
+				//平仓成功后，重置PER_PRICE
+				PER_PRICE = 0.0
+				MAX_WIN_RATIO = 0.0
+			}
+			return nil
+		}
+
 		if posSz >= float64(MAX_SIZE) {
 			log.Printf("仓位已满，posSz=: %f", posSz)
 
@@ -106,6 +126,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 				if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz/2, 'f', 1, 64)) {
 					//平仓成功后，重置PER_PRICE
 					PER_PRICE = 0.0
+					MAX_WIN_RATIO = 0.0
 				}
 			}
 			return nil
