@@ -17,7 +17,7 @@ var (
 	PER_SIZE      float64 = 0.5
 	POS_SIDE      string  = ""
 	PER_PRICE     float64 = 0.0
-	GRIDE_RTIDO   float64 = 0.001 //每网格间距0.1%
+	GRIDE_RTIDO   float64 = 0.003 //每网格间距0.3%
 	MAX_WIN_RATIO float64 = 0.0
 	MIN_WIN_RATIO float64 = 0.003 //最小盈利
 )
@@ -109,8 +109,8 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 		// 移动止盈，当盈利回落了3/10时，平仓
 		if posSz > 0 && winRatio > MIN_WIN_RATIO && winRatio < MAX_WIN_RATIO*0.7 {
-			log.Printf("[INFO] 移动止盈，当盈利回落了3/10时，平仓: inst=%s, prediction=%s, price=%f.2f, posSz=%f",
-				msg.InstID, msg.Prediction, msg.Price, posSz)
+			log.Printf("[INFO] 移动止盈，当盈利回落了3/10时，平仓: inst=%s, prediction=%s, price=%f.2f, posSz=%f, winRatio=%f, MAX_WIN_RATIO=%f",
+				msg.InstID, msg.Prediction, msg.Price, posSz, winRatio, MAX_WIN_RATIO)
 			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
 				//平仓成功后，重置PER_PRICE
 				PER_PRICE = 0.0
