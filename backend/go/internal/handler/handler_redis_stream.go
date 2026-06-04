@@ -13,13 +13,14 @@ import (
 var (
 	//推荐的配置，当数据库不存在交易配置时，默认使用该配置
 	//遵循了棋经十诀中的“慎勿轻速”，避免因为交易速度过快导致仓位风险变重
-	MAX_SIZE      float64 = 2.0
-	PER_SIZE      float64 = 0.5
-	POS_SIDE      string  = ""
-	PER_PRICE     float64 = 0.0
-	GRIDE_RTIDO   float64 = 0.003 //每网格间距0.3%
-	MAX_WIN_RATIO float64 = 0.0
-	MIN_WIN_RATIO float64 = 0.003 //最小盈利
+	MAX_SIZE        float64 = 2.0
+	PER_SIZE        float64 = 0.5
+	POS_SIDE        string  = ""
+	PER_PRICE       float64 = 0.0
+	GRIDE_RTIDO     float64 = 0.003 //每网格间距0.3%
+	MAX_WIN_RATIO   float64 = 0.0
+	MIN_WIN_RATIO   float64 = 0.003 //最小盈利
+	MAX_PROBABILITY float64 = 0.0   //最大概率
 )
 
 func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKExHTTPClient) common.StreamSignalHandler {
@@ -91,8 +92,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 				msg.InstID, msg.Prediction, msg.Price, posSz)
 			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
 				//平仓成功后，重置PER_PRICE
-				PER_PRICE = 0.0
-				MAX_WIN_RATIO = 0.0
+				reset()
 			}
 			return nil
 		}
@@ -113,8 +113,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 				msg.InstID, msg.Prediction, msg.Price, posSz, winRatio, MAX_WIN_RATIO)
 			if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz, 'f', 1, 64)) {
 				//平仓成功后，重置PER_PRICE
-				PER_PRICE = 0.0
-				MAX_WIN_RATIO = 0.0
+				reset()
 			}
 			return nil
 		}
@@ -125,8 +124,7 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 			if winRatio >= GRIDE_RTIDO*2 { //减轻压力，增加操作空间
 				if CloseOrder(okRest, msg.InstID, POS_SIDE, strconv.FormatFloat(posSz/2, 'f', 1, 64)) {
 					//平仓成功后，重置PER_PRICE
-					PER_PRICE = 0.0
-					MAX_WIN_RATIO = 0.0
+					reset()
 				}
 			}
 			return nil
@@ -150,9 +148,16 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 		// 	return nil
 		// }
 
-		// 反向相同的情况下消除噪声
+		// -----买入区域-----
+		// 方向相同的情况下消除噪声
 		if msg.Probabilities[msg.Prediction] < 0.5 {
 			log.Printf("概率过低: %s, probability=%f", msg.Prediction, msg.Probabilities[msg.Prediction])
+			return nil
+		}
+
+		// MAX_PROBABILITY不为0说明不是初始值。当前的概率小于最大概率，不执行交易
+		if MAX_PROBABILITY < 0 && msg.Probabilities[msg.Prediction] < MAX_PROBABILITY {
+			log.Printf("概率过低: %s, probability=%f, MAX_PROBABILITY=%f", msg.Prediction, msg.Probabilities[msg.Prediction], MAX_PROBABILITY)
 			return nil
 		}
 
@@ -180,24 +185,36 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2*2, msg.InstID, "long")
 			PER_PRICE = msg.Price
+			if msg.Probabilities[msg.Prediction] > MAX_PROBABILITY {
+				MAX_PROBABILITY = msg.Probabilities[msg.Prediction]
+			}
 			return nil
 		case "4":
 			log.Printf("[INFO] 预测涨下多单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2, msg.InstID, "long")
 			PER_PRICE = msg.Price
+			if msg.Probabilities[msg.Prediction] > MAX_PROBABILITY {
+				MAX_PROBABILITY = msg.Probabilities[msg.Prediction]
+			}
 			return nil
 		case "2":
 			log.Printf("[INFO] 预测跌下空单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2, msg.InstID, "short")
 			PER_PRICE = msg.Price
+			if msg.Probabilities[msg.Prediction] > MAX_PROBABILITY {
+				MAX_PROBABILITY = msg.Probabilities[msg.Prediction]
+			}
 			return nil
 		case "1":
 			log.Printf("[INFO] 预测暴跌下空单: inst=%s, prediction=%s, probability=%f, price=%f",
 				msg.InstID, msg.Prediction, msg.Probabilities[msg.Prediction], msg.Price)
 			openOrder(okRest, msg.Price, msg.Line2*2, msg.InstID, "short")
 			PER_PRICE = msg.Price
+			if msg.Probabilities[msg.Prediction] > MAX_PROBABILITY {
+				MAX_PROBABILITY = msg.Probabilities[msg.Prediction]
+			}
 			return nil
 		default:
 			log.Printf("[WARN] Unknown prediction: %s", msg.Prediction)
@@ -205,6 +222,13 @@ func NewRedisStreamMessageHandler(mongoClient *mongodb.Client, okRest *rest.OKEx
 
 		return nil
 	}
+}
+
+// reset 重置交易参数
+func reset() {
+	PER_PRICE = 0.0
+	MAX_WIN_RATIO = 0.0
+	MAX_PROBABILITY = 0.0
 }
 
 func openOrder(okRest *rest.OKExHTTPClient, price float64, line float64, instId string, posSide string) {
